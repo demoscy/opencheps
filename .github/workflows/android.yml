@@ -3,6 +3,8 @@ name: Android CI
 on:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -70,8 +72,8 @@ jobs:
           cp sf-cache/libstockfish-armv7.so  app/src/main/jniLibs/armeabi-v7a/libstockfish.so
           ls -la app/src/main/jniLibs/*/
 
-      - name: Build debug APK splits
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Test calibration and build debug APK splits
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
 
       - name: List APKs
         run: find app/build/outputs/apk -name '*.apk' -exec ls -lh {} \;

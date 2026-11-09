@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.projection.MediaProjectionManager;
+import android.media.projection.MediaProjectionConfig;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -108,7 +109,10 @@ public class MainActivity extends AppCompatActivity {
         btnOverlay.setOnClickListener(v -> requestOverlay());
         btnStart.setOnClickListener(v -> {
             if (!Settings.canDrawOverlays(this)) { toast("Grant overlay permission first"); return; }
-            projectionLauncher.launch(mpm.createScreenCaptureIntent());
+            // Calibration uses physical display coordinates, so app-only letterboxed capture is unsuitable.
+            projectionLauncher.launch(Build.VERSION.SDK_INT >= 34
+                    ? mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+                    : mpm.createScreenCaptureIntent());
         });
         btnStop.setOnClickListener(v -> {
             stopService(new Intent(this, ScreenCaptureService.class));

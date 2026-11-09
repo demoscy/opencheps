@@ -22,6 +22,17 @@ It's a personal project, not a polished commercial product. It works, it has rou
 
 ---
 
+## Manual board area
+
+The floating panel's **Set board area** action opens a draggable, resizable 8×8
+square. **Save** remembers its normalized bounds; **Auto** restores automatic
+detection; **Cancel** preserves the previous setting. See
+[manual calibration and phone testing](MANUAL_BOARD_AREA.md) for coordinate,
+rotation, and capture behavior. The existing starting-position template setup
+is still required before analyzing puzzles.
+
+---
+
 ## Hard numbers I actually measured
 
 Tested the detector and bootstrap pipeline on synthetic 1080×2340 phone screenshots using Java SE on a desktop (the production Android code is identical):

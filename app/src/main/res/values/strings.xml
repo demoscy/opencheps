@@ -12,4 +12,10 @@
     <string name="notif_text">Tap Stop on the floating panel to end the session</string>
     <string name="how_it_works">How auto-detection works</string>
     <string name="how_it_works_body">1. Pick your colour above.\n2. Open chess app on STARTING position.\n3. Tap Start Watching, accept both prompts.\n4. App locates the board and learns piece templates.\n5. Arrows appear only on YOUR turn.\n6. If position glitches: tap recalibrate on the floating panel.</string>
+    <string name="board_area_set">Set board area</string>
+    <string name="board_area_help">Drag the square to move. Drag a corner to resize.
+Match the grid to the exact 8×8 board.</string>
+    <string name="board_area_save">Save</string>
+    <string name="board_area_auto">Auto</string>
+    <string name="board_area_cancel">Cancel</string>
 </resources>

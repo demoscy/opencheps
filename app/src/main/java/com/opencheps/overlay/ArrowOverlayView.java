@@ -82,6 +82,11 @@ public class ArrowOverlayView extends View {
     }
 
     @Override protected void onDraw(Canvas c) {
+        super.onDraw(c);
+        int[] origin = new int[2];
+        getLocationOnScreen(origin);
+        c.save();
+        c.translate(-origin[0], -origin[1]);
         if (boardBounds != null) {
             frame.setColor(boardFrameColor);
             c.drawRect(boardBounds, frame);
@@ -117,5 +122,6 @@ public class ArrowOverlayView extends View {
                 c.drawText(a.label, tx - (w - 18f) / 2f, ty + 8f, label);
             }
         }
+        c.restore();
     }
 }

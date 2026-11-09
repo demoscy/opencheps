@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.os.Build;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -31,6 +32,7 @@ public class FloatingPanel {
         void onPauseToggle(boolean paused);
         void onStop();
         void onRecalibrate();
+        void onSetBoardArea();
         void onSideChange(Side newSide);
     }
     private Listener listener;
@@ -43,8 +45,8 @@ public class FloatingPanel {
     public void setListener(Listener l) { this.listener = l; }
 
     @SuppressLint("ClickableViewAccessibility")
-    public void attach() {
-        if (root != null) return;
+    public boolean attach() {
+        if (root != null) return true;
         root = LayoutInflater.from(ctx).inflate(R.layout.floating_panel, null);
         statusTv    = root.findViewById(R.id.panelStatus);
         evalTv      = root.findViewById(R.id.panelEval);
@@ -66,6 +68,9 @@ public class FloatingPanel {
         });
         recalBtn.setOnClickListener(v -> {
             if (listener != null) listener.onRecalibrate();
+        });
+        root.findViewById(R.id.panelBoardArea).setOnClickListener(v -> {
+            if (listener != null) listener.onSetBoardArea();
         });
         sideWhiteTv.setOnClickListener(v -> chooseSide(Side.WHITE));
         sideBlackTv.setOnClickListener(v -> chooseSide(Side.BLACK));
@@ -113,8 +118,10 @@ public class FloatingPanel {
             }
         });
 
-        try { wm.addView(root, lp); } catch (Exception ignored) {}
+        try { wm.addView(root, lp); }
+        catch (Exception e) { root = null; return false; }
         renderSideToggle();
+        return true;
     }
 
     private void chooseSide(Side s) {
@@ -159,14 +166,22 @@ public class FloatingPanel {
         });
     }
 
+    public void setVisible(boolean visible) {
+        if (root != null) root.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+    }
+
     public boolean isPaused() { return paused; }
 
     public void setStatus(String s) {
-        if (statusTv != null) statusTv.post(() -> statusTv.setText(s));
+        if (statusTv == null) return;
+        if (Looper.myLooper() == Looper.getMainLooper()) statusTv.setText(s);
+        else statusTv.post(() -> statusTv.setText(s));
     }
 
     public void setEval(String s) {
-        if (evalTv != null) evalTv.post(() -> evalTv.setText(s == null ? "" : s));
+        if (evalTv == null) return;
+        if (Looper.myLooper() == Looper.getMainLooper()) evalTv.setText(s == null ? "" : s);
+        else evalTv.post(() -> evalTv.setText(s == null ? "" : s));
     }
 
     public void detach() {
