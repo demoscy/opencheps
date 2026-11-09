@@ -5,8 +5,13 @@ public final class BoardMapping {
     public final float left, top, width, height;
 
     public BoardMapping(int captureLeft, int captureTop, int captureSide, float scaleX, float scaleY) {
-        left = captureLeft * scaleX;
-        top = captureTop * scaleY;
+        this(captureLeft, captureTop, captureSide, scaleX, scaleY, 0, 0);
+    }
+
+    public BoardMapping(int captureLeft, int captureTop, int captureSide, float scaleX, float scaleY,
+                        int screenOffsetX, int screenOffsetY) {
+        left = screenOffsetX + captureLeft * scaleX;
+        top = screenOffsetY + captureTop * scaleY;
         width = captureSide * scaleX;
         height = captureSide * scaleY;
     }

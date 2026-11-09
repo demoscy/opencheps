@@ -1,6 +1,12 @@
 package com.opencheps.capture;
 
 import android.app.Service;
+import android.graphics.Bitmap;
+import android.graphics.PixelFormat;
+import android.media.ImageReader;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import com.opencheps.engine.StockfishEngine;
 import com.opencheps.overlay.ArrowOverlayView;
 import com.opencheps.util.Side;
@@ -8,6 +14,7 @@ import com.opencheps.vision.BoardDetector;
 import com.opencheps.vision.PieceClassifier;
 
 import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -34,8 +41,8 @@ public class ScreenCaptureServiceTest {
         ReflectionHelpers.setField(service, "classifier", classifier);
         ReflectionHelpers.setField(service, "capToScreenX", 3f);
         ReflectionHelpers.setField(service, "capToScreenY", 3f);
-        ReflectionHelpers.setField(service, "currentPvs", Collections.singletonList(
-                new StockfishEngine.Pv("e2e4", 0, false)));
+        ReflectionHelpers.setField(service, "currentPvs", new ArrayList<>(Collections.singletonList(
+                new StockfishEngine.Pv("e2e4", 0, false))));
     }
 
     private List<ArrowOverlayView.Arrow> rebuild(BoardDetector.Board board) {
@@ -93,4 +100,149 @@ public class ScreenCaptureServiceTest {
     @Test public void processRestartRequiresFreshProjectionGrant() {
         assertEquals(Service.START_NOT_STICKY, service.onStartCommand(null, 0, 0));
     }
+    @Test public void uncertainPositionInvalidatesCachedAndDisplayedMoves() {
+        ReflectionHelpers.setField(service, "lastEngineFen", "old position");
+        ReflectionHelpers.setField(service, "currentArrows", rebuild(new BoardDetector.Board(10, 100, 320, 1)));
+        ReflectionHelpers.callInstanceMethod(service, "invalidateAnalysis");
+        ShadowLooper.idleMainLooper();
+        List<?> arrows = ReflectionHelpers.getField(service, "currentArrows");
+        List<?> pvs = ReflectionHelpers.getField(service, "currentPvs");
+        assertTrue(arrows.isEmpty());
+        assertTrue(pvs.isEmpty());
+        assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+    }
+
+    @Test public void engineFailureDoesNotSuppressTheNextAttemptForTheSamePosition() {
+        int[] queries = {0};
+        StockfishEngine failing = new StockfishEngine() {
+            @Override public synchronized List<Pv> topMoves(String fen, int time, int count) throws Exception {
+                queries[0]++;
+                throw new java.io.IOException("test failure");
+            }
+        };
+        ReflectionHelpers.setField(service, "engine", failing);
+        char[][] grid = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", grid);
+        for (int i = 0; i < 2; i++) {
+            ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender",
+                    from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, null));
+            assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+        }
+        assertEquals(2, queries[0]);
+    }
+
+    @Test public void appOnlyCapturePausesWhenSelectedAppIsNotVisible() {
+        assertTrue(ReflectionHelpers.callInstanceMethod(service, "canCapture", from(int.class, 0)));
+        ReflectionHelpers.setField(service, "capturedContentVisible", false);
+        assertFalse(ReflectionHelpers.callInstanceMethod(service, "canCapture", from(int.class, 0)));
+        ReflectionHelpers.setField(service, "capturedContentVisible", true);
+        assertTrue(ReflectionHelpers.callInstanceMethod(service, "canCapture", from(int.class, 0)));
+    }
+
+    @Test public void missingFreshFrameRestoresCaptureStateAndClearsStaleAnalysis() {
+        ImageReader reader = ImageReader.newInstance(32, 32, PixelFormat.RGBA_8888, 2);
+        ReflectionHelpers.setField(service, "reader", reader);
+        ReflectionHelpers.setField(service, "worker", new Handler(Looper.getMainLooper()));
+        ReflectionHelpers.setField(service, "framePending", true);
+        ReflectionHelpers.setField(service, "lastEngineFen", "old position");
+        ReflectionHelpers.callInstanceMethod(service, "acquireCleanFrame", from(int.class, 0),
+                from(long.class, 0L), from(long.class, SystemClock.uptimeMillis() - 1));
+        ShadowLooper.idleMainLooper();
+        assertFalse(ReflectionHelpers.getField(service, "framePending"));
+        assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+        reader.close();
+    }
+
+    private char[][] copy(char[][] grid) {
+        char[][] result = new char[8][];
+        for (int r = 0; r < 8; r++) result[r] = grid[r].clone();
+        return result;
+    }
+
+    private void recognizeTwice(char[][] grid, Bitmap bitmap) {
+        for (int i = 0; i < 2; i++) ReflectionHelpers.callInstanceMethod(service, "processRecognizedGrid",
+                from(char[][].class, grid), from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)),
+                from(Bitmap.class, bitmap));
+    }
+
+    @Test public void analysisResumesAfterOpeningAndMultipleComputerReplies() {
+        List<String> queries = new ArrayList<>();
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> topMoves(String fen, int time, int count) {
+                queries.add(fen);
+                return Collections.singletonList(new Pv("g1f3", 20, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        char[][] position = copy(initial);
+        Bitmap bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
+        position[6][4] = '.'; position[4][4] = 'P';
+        recognizeTwice(position, bitmap);
+        assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "observedStm"));
+        assertTrue(queries.isEmpty());
+        position = copy(position);
+        position[1][4] = '.'; position[3][4] = 'p';
+        recognizeTwice(position, bitmap);
+        assertEquals(Side.WHITE, ReflectionHelpers.getField(service, "observedStm"));
+        assertEquals(1, queries.size());
+        assertTrue(queries.get(0).contains("4p3/4P3"));
+        List<?> arrows = ReflectionHelpers.getField(service, "currentArrows");
+        assertFalse(arrows.isEmpty());
+        position = copy(position);
+        position[7][6] = '.'; position[5][5] = 'N';
+        recognizeTwice(position, bitmap);
+        assertEquals(1, queries.size());
+        position = copy(position);
+        position[0][1] = '.'; position[2][2] = 'n';
+        recognizeTwice(position, bitmap);
+        assertEquals(2, queries.size());
+        bitmap.recycle();
+    }
+
+    @Test public void fastComputerReplyIsAcceptedWithoutKeepingOldArrows() {
+        int[] queries = {0};
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> topMoves(String fen, int time, int count) {
+                queries[0]++;
+                return Collections.singletonList(new Pv("g1f3", 20, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        ReflectionHelpers.setField(service, "currentArrows", rebuild(new BoardDetector.Board(0, 0, 320, 1)));
+        char[][] both = copy(initial);
+        both[6][4] = '.'; both[4][4] = 'P'; both[1][4] = '.'; both[3][4] = 'p';
+        Bitmap bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
+        ReflectionHelpers.callInstanceMethod(service, "processRecognizedGrid", from(char[][].class, both),
+                from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, bitmap));
+        List<?> arrows = ReflectionHelpers.getField(service, "currentArrows");
+        assertTrue(arrows.isEmpty());
+        assertEquals(0, queries[0]);
+        // The next matching clean frame confirms the position after both moves.
+        ReflectionHelpers.callInstanceMethod(service, "processRecognizedGrid", from(char[][].class, both),
+                from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, bitmap));
+        assertEquals(1, queries[0]);
+        assertEquals(Side.WHITE, ReflectionHelpers.getField(service, "observedStm"));
+        bitmap.recycle();
+    }
+
+    @Test public void changingOnlyTheCaptureViewportDoesNotInventANewTurn() {
+        char[][] grid = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", grid);
+        ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
+        ReflectionHelpers.setField(service, "lastEngineFen", "old bounds");
+        ReflectionHelpers.callInstanceMethod(service, "resetForCaptureGeometry", from(boolean.class, false));
+        assertSame(grid, ReflectionHelpers.getField(service, "confirmedGrid"));
+        assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "observedStm"));
+        assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+    }
+
+    @Test public void physicalRotationStillClearsPositionTracking() {
+        char[][] grid = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", grid);
+        ReflectionHelpers.callInstanceMethod(service, "resetForCaptureGeometry", from(boolean.class, true));
+        assertNull(ReflectionHelpers.getField(service, "confirmedGrid"));
+    }
+
 }

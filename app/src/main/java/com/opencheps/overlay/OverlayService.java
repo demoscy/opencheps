@@ -5,12 +5,14 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Handler;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.WindowInsets;
 
 import androidx.annotation.Nullable;
 
@@ -29,6 +31,7 @@ public class OverlayService extends Service {
     private CalibrationOverlay calibration;
     private CalibrationListener calibrationListener;
     private boolean suspended;
+    private boolean capturing;
 
     public interface CalibrationListener {
         // changed=false means CANCEL, changed=true and area=null means AUTO.
@@ -54,8 +57,7 @@ public class OverlayService extends Service {
         if (instance == null) return;
         instance.suspended = true;
         instance.arrows.clearAll();
-        instance.arrows.setVisibility(View.INVISIBLE);
-        instance.panel.setVisible(false);
+        instance.updateVisibility();
     }
 
     /** The caller has stopped capture before attaching the editor. */
@@ -93,8 +95,33 @@ public class OverlayService extends Service {
     public static void resumeAfterCalibration() {
         if (instance == null) return;
         instance.suspended = false;
-        instance.arrows.setVisibility(View.VISIBLE);
-        instance.panel.setVisible(true);
+        instance.updateVisibility();
+    }
+
+    /** Main thread only: hide our own pixels briefly while a fresh capture frame is acquired. */
+    public static void setCapturing(boolean capturing) {
+        if (instance == null) return;
+        instance.capturing = capturing;
+        instance.updateVisibility();
+    }
+
+    private void updateVisibility() {
+        boolean visible = !suspended && !capturing;
+        arrows.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        panel.setVisible(visible);
+    }
+
+    /** Visible system bars describe the on-screen origin of a normal full-screen shared app. */
+    public static Rect displayInsets() {
+        if (instance == null) return new Rect();
+        WindowInsets insets = instance.arrows.getRootWindowInsets();
+        if (insets == null) return new Rect();
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            return new Rect(safe.left, safe.top, safe.right, safe.bottom);
+        }
+        return new Rect(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
     }
 
     public static void cancelCalibration() {

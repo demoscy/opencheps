@@ -7,7 +7,7 @@ import java.util.List;
 
 public class MoveAnalyzer {
 
-    public enum Kind { NONE, QUIET, CAPTURE, CASTLE, EN_PASSANT, PROMOTION, UNKNOWN }
+    public enum Kind { NONE, QUIET, CAPTURE, CASTLE, EN_PASSANT, PROMOTION, TWO_PLIES, UNKNOWN }
 
     public static class Result {
         public final Kind kind;
@@ -16,6 +16,34 @@ public class MoveAnalyzer {
         public Result(Kind kind, Side mover, int changeCount) {
             this.kind = kind; this.mover = mover; this.changeCount = changeCount;
         }
+    }
+
+    /** A quick computer reply can leave two independent quiet moves between samples. */
+    public static Result analyze(char[][] prev, char[][] curr, Side expectedFirstMover) {
+        Result single = analyze(prev, curr);
+        if (single.kind != Kind.UNKNOWN || prev == null || curr == null || expectedFirstMover == null) return single;
+        char[] from = new char[2], to = new char[2];
+        int changed = 0;
+        for (int r = 0; r < 8; r++) for (int f = 0; f < 8; f++) {
+            char before = prev[r][f] == 0 ? '.' : prev[r][f];
+            char after = curr[r][f] == 0 ? '.' : curr[r][f];
+            if (before == after) continue;
+            changed++;
+            if (before != '.' && after == '.') {
+                int side = Character.isUpperCase(before) ? 0 : 1;
+                if (from[side] != 0) return single;
+                from[side] = before;
+            } else if (before == '.' && after != '.') {
+                int side = Character.isUpperCase(after) ? 0 : 1;
+                if (to[side] != 0) return single;
+                to[side] = after;
+            } else return single; // Captures/ambiguous overlapping moves still need resynchronization.
+        }
+        if (changed == 4 && from[0] != 0 && from[1] != 0 && from[0] == to[0] && from[1] == to[1]) {
+            Side lastMover = expectedFirstMover == Side.WHITE ? Side.BLACK : Side.WHITE;
+            return new Result(Kind.TWO_PLIES, lastMover, changed);
+        }
+        return single;
     }
 
     public static Result analyze(char[][] prev, char[][] curr) {

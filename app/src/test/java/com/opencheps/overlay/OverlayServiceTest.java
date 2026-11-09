@@ -3,6 +3,8 @@ package com.opencheps.overlay;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.view.WindowManager;
+import android.view.View;
+import org.robolectric.util.ReflectionHelpers;
 
 import org.junit.After;
 import org.junit.Test;
@@ -16,7 +18,7 @@ import org.robolectric.shadows.ShadowSettings;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 34)
+@Config(sdk = {26, 34})
 public class OverlayServiceTest {
     private ServiceController<OverlayService> controller;
 
@@ -53,7 +55,7 @@ public class OverlayServiceTest {
         assertNull(OverlayService.panel());
     }
 
-    @Test public void windowsShareFullDisplayOriginAndOnlyEditorAcceptsTouches() {
+    @Test @Config(sdk = 34) public void windowsShareFullDisplayOriginAndOnlyEditorAcceptsTouches() {
         WindowManager.LayoutParams arrows = OverlayWindow.fullScreen(false);
         WindowManager.LayoutParams editor = OverlayWindow.fullScreen(true);
         assertEquals(arrows.gravity, editor.gravity);
@@ -63,4 +65,23 @@ public class OverlayServiceTest {
         assertEquals(0, editor.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
         assertEquals(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY, editor.type);
     }
+    @Test public void cleanFrameCaptureHidesOwnPixelsAndDoesNotRevealCalibration() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        ArrowOverlayView arrows = ReflectionHelpers.getField(controller.get(), "arrows");
+        FloatingPanel panel = OverlayService.panel();
+        View panelRoot = ReflectionHelpers.getField(panel, "root");
+        assertEquals(View.VISIBLE, arrows.getVisibility());
+        OverlayService.setCapturing(true);
+        assertEquals(View.INVISIBLE, arrows.getVisibility());
+        assertEquals(View.INVISIBLE, panelRoot.getVisibility());
+        OverlayService.suspendForCalibration();
+        OverlayService.setCapturing(false);
+        assertEquals(View.INVISIBLE, arrows.getVisibility());
+        assertEquals(View.INVISIBLE, panelRoot.getVisibility());
+        OverlayService.resumeAfterCalibration();
+        assertEquals(View.VISIBLE, arrows.getVisibility());
+        assertEquals(View.VISIBLE, panelRoot.getVisibility());
+    }
+
 }

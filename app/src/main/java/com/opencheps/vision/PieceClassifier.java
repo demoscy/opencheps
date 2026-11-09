@@ -60,7 +60,7 @@ public class PieceClassifier {
             }
         }
 
-        if (minOccupiedEdge < maxEmptyEdge * 1.5f) {
+        if (minOccupiedEdge <= 0.0001f || minOccupiedEdge < maxEmptyEdge * 1.5f) {
             Log.i(TAG, "bootstrap reject: minOccupied=" + minOccupiedEdge
                     + " maxEmpty=" + maxEmptyEdge);
             return false;
@@ -97,7 +97,7 @@ public class PieceClassifier {
         for (int i = 0; i < 64; i++) {
             char c = labels[i];
             if (c == '.') continue;
-            float lum = samples[i].meanLum;
+            float lum = samples[i].contrastLum;
             if (Character.isUpperCase(c)) { whiteSum += lum; whiteN++; }
             else                          { blackSum += lum; blackN++; }
         }
@@ -190,20 +190,19 @@ public class PieceClassifier {
     private char classifyOne(SquareSampler.Sample s, int r, int f) {
         if (s.edgeEnergy < pieceColorThreshold) return '.';
 
-        float distWhite = Math.abs(s.meanLum - whitePieceLumAvg);
-        float distBlack = Math.abs(s.meanLum - blackPieceLumAvg);
+        float distWhite = Math.abs(s.contrastLum - whitePieceLumAvg);
+        float distBlack = Math.abs(s.contrastLum - blackPieceLumAvg);
         boolean isWhitePiece = distWhite < distBlack;
 
-        boolean light = ((r + f) & 1) == 0;
         float best = Float.MAX_VALUE;
         char bestC = isWhitePiece ? 'P' : 'p';
         for (int i = 0; i < templates.length; i++) {
             char tc = labels[i];
             if (tc == '.') continue;
             if (Character.isUpperCase(tc) != isWhitePiece) continue;
-            boolean tplLight = (((i / 8) + (i % 8)) & 1) == 0;
-            if (tplLight != light) continue;
-            float d = SquareSampler.lumDistance(s.feature, templates[i].feature);
+            // Background-subtracted silhouettes can match either square colour. In particular,
+            // a king or queen has only one starting template but can move to either colour.
+            float d = SquareSampler.shapeDistance(s.feature, templates[i].feature);
             if (d < best) { best = d; bestC = tc; }
         }
         return bestC;

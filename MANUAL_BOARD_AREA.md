@@ -19,8 +19,12 @@ editing cancels unsaved edits. Capture resizes its existing VirtualDisplay rathe
 than reusing the MediaProjection permission to create another one.
 
 Analysis pauses while editing. The capture surface is detached before the editor
-is shown, then reattached after the editor is removed; queued frames are discarded
-and timestamps checked before analysis resumes. Results from before editing,
+is shown. Every analysis sample also briefly hides the normal arrows and panel,
+waits for two display frames, and attaches the capture surface to obtain a fresh
+image. The surface is detached again before the overlays return. This prevents
+recognition of OpenCheps's own arrows, frame, labels, or controls, including on a
+static board. Queued frames are discarded and timestamps checked. The overlay may
+briefly blink while a clean frame is acquired. Results from before editing,
 pause, side changes, or display changes cannot redraw stale arrows. Calibration
 does not override the normal Pause setting. No images are persisted, and no
 permissions, accounts, analytics, or network services are added.
@@ -49,19 +53,45 @@ and layout; then open the puzzle. Recognition accuracy and side-to-move inferenc
 retain the existing limitations. This feature does not add automatic moves or
 change the chess analysis algorithm.
 
+## Recognition after moves and app-only capture
+
+Piece features now subtract the local square background before comparing
+normalized silhouettes. Piece colour uses contrast against that background, and
+templates can match either square colour. This handles last-move highlights and
+pieces such as a king crossing onto a square colour without a starting template.
+
+Any changed or uncertain position immediately clears the previous arrows and
+evaluation. A failed engine query remains retryable. Two independent quiet moves
+(one per side) between clean frames are recognized as two turns, so a quick
+computer reply need not leave the tracker waiting for an intermediate position.
+Ambiguous captures or larger jumps retain the existing stable-frame resync path;
+this is still a template classifier, not a full visual chess-history reconstruction.
+
+Android's capture chooser again offers a single app or the entire display. A
+full-screen shared app is mapped using its reported content size and visible
+system-bar/cutout insets. The VirtualDisplay resizes to that content size, and
+manual screen bounds and arrows both use the same offset. When the shared app
+is hidden, analysis waits and arrows are cleared. Floating/split-screen or other
+unrecognized app dimensions pause analysis with a message instead of guessing
+coordinates; use a full-screen app or entire-display capture for those layouts.
+
 ## Phone acceptance test (including Pixel 10 Pro XL)
 
 1. Install the **arm64-v8a** debug APK, allow overlays, select White, and start
-   capture. On Android 14+ the app requests the entire display for coordinate
-   consistency. Open Chess.com with a starting position in your usual theme.
+   capture. On Android 14+ choose either Chess.com as the shared app or the entire
+   display. Keep Chess.com full-screen and show a starting position in your usual theme.
 2. Tap **Set board area**. Verify analysis/normal arrows and panel disappear, the
    underlying board is visible, and all four handles and an 8×8 grid appear.
 3. Drag the center and each corner. Check the opposite corner stays fixed on
    resize, the selection stays square, and it cannot leave the display. Align
    the playable board exactly, then **Save**.
-4. Wait for piece-template calibration at the starting position. Open a puzzle
-   in the same layout. Confirm the board frame and arrow endpoints align with
-   square centers. Piece recognition and turn inference remain separate checks.
+4. Wait for piece-template calibration at the starting position. In practice
+   against the computer, play e2-e4 and wait for its reply, then play another move.
+   Check that arrows disappear during uncertain recognition and return for your
+   next turn rather than keeping the first recommendation. Repeat with Black,
+   highlights enabled, and a fast computer reply. Also test a king/queen moving
+   to the opposite square colour. Open a puzzle in the same layout and confirm
+   the frame and arrow endpoints align with square centers.
 5. Stop and restart capture/app without clearing app data. Open **Set board area**
    and confirm the saved selection returns. Show the starting position again for
    the new session's templates.
@@ -77,7 +107,10 @@ change the chess analysis algorithm.
 9. Stop using the notification while editing, revoke overlay/capture permission,
    switch apps/Home, and restart. Check there are no orphaned windows, stuck editor,
    stale arrows, or permission-token crashes. Repeat with gesture navigation,
-   camera cutout/status bars, and your preferred display/font size.
+   camera cutout/status bars, and your preferred display/font size. With app-only
+   capture, switch Home and back; analysis must wait while Chess.com is hidden.
+   Repeat calibration and multiple turns in both app-only and entire-display modes.
+   Check that unsupported multi-window layouts pause with a message.
 
 Unit/Robolectric tests exercise normalized bounds, corrupt inputs, resolution and
 rotation validation, edge clamping, all resize corners, real editor touch handling,
@@ -90,9 +123,13 @@ inset behavior require the phone tests above.
 
 With JDK 17, Gradle 8.7, SDK 34, and the workflow's SHA-verified Stockfish 18
 binaries, `:app:testDebugUnitTest :app:assembleDebug :app:lintDebug` passed:
-28 tests, both ARM APK splits built, and zero lint errors. The editor and
-preferences tests run on Android API 26 and 34 via Robolectric. Lint also reports
-56 warnings, including existing UI/resource warnings and intentional physical
+The original calibration change passed 28 tests, both ARM APK builds, and lint.
+The follow-up passed 53 unit/Robolectric tests, built both ARM APK splits, and
+completed lint with zero errors (56 warnings). It adds highlighted-board move sequences, opposite-colour piece
+templates, quick computer replies, stale-result clearing, retry after an engine
+failure, overlay hiding, and app-content coordinate conversion. The editor,
+overlay lifecycle, and preferences tests run on Android API 26 and 34 via Robolectric. Lint also reports
+warnings, including existing UI/resource warnings and intentional physical
 left/right gravity for coordinate-based overlays. `git diff --check` passes.
 The Android manifest is unchanged. The phone acceptance tests remain unverified.
 
