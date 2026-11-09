@@ -48,11 +48,18 @@ is an illustrative engine variation, not independently Elo-limited play per ply.
 The line clears with the old evaluation on pause or uncertain/changed positions.
 
 A strength-limited Stockfish `bestmove` can differ from its top `info ... pv`
-line. The app uses the actual selected move. If necessary, a second search
+line. The app uses the actual selected move. With the study line enabled, a second search
 restricted to that move obtains its own continuation, capped at 500 ms extra.
 Handicap is disabled for that fixed-root continuation, then reapplied for the
 next move selection. Complete same-root variations are retained when a later
 report is truncated. The strongest candidate never replaces the chosen move.
+
+For quicker suggestions, set **Think time** to **100–300 ms** and turn off
+**Show a 3-move study line**. Disabling the line skips its extra search entirely;
+one-to-three next-move choices remain available. Short searches may miss tactics
+and still produce strong moves. Think time is the engine's search budget, not
+total response time: capture, recognition, two matching frames and scheduling
+also add delay. Changing time or the line setting refreshes the same position.
 
 ## Manual board area
 
@@ -126,8 +133,9 @@ setoption name Move Overhead value 100
 ```
 
 Stockfish uses two threads and a 48 MB hash. The default search time is 1500 ms,
-configurable from 300 to 3000 ms, with at most another 500 ms to obtain the
-selected move's continuation. MultiPV changes to the requested choice count for
+configurable from 100 to 3000 ms. With the study line enabled, at most another
+500 ms obtains the selected move's continuation when needed; with it off there
+is no follow-up search. MultiPV changes to the requested choice count for
 each analysis. Elo limiting is a separate setting. Stockfish's
 strength calibration cannot be converted directly into your online account rating.
 

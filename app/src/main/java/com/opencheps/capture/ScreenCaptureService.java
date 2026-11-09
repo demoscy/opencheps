@@ -109,6 +109,8 @@ public class ScreenCaptureService extends Service {
     private Side observedStm = Side.WHITE;
     private String lastEngineFen = "";
     private int lastEngineStrength, lastEngineChoices;
+    private int lastEngineThinkMs;
+    private boolean lastEngineStudyLine;
     private Bitmap lastBoardPreview;
     private String lastReadDetails = "Waiting for a captured board";
     private long lastPreviewAt;
@@ -490,7 +492,9 @@ public class ScreenCaptureService extends Service {
                     drainReader();
                 } else if (SystemClock.uptimeMillis() >= nextCleanAllowed) {
                     if (!lastEngineFen.isEmpty() && (lastEngineStrength != Prefs.strengthElo(ScreenCaptureService.this)
-                            || lastEngineChoices != Prefs.multiPv(ScreenCaptureService.this)))
+                            || lastEngineChoices != Prefs.multiPv(ScreenCaptureService.this)
+                            || lastEngineThinkMs != Prefs.thinkMs(ScreenCaptureService.this)
+                            || lastEngineStudyLine != Prefs.showStudyLine(ScreenCaptureService.this)))
                         invalidateAnalysis();
                     refreshStudyLine();
                     boolean appOnly = captureViewport.width != screenW || captureViewport.height != screenH;
@@ -901,17 +905,20 @@ public class ScreenCaptureService extends Service {
         if (fen == null) { panelStatus("FEN build failed"); return; }
         int strength = Prefs.strengthElo(getApplicationContext());
         int choices = Prefs.multiPv(getApplicationContext());
-        if (fen.equals(lastEngineFen) && strength == lastEngineStrength && choices == lastEngineChoices) {
+        int think = Prefs.thinkMs(getApplicationContext());
+        boolean studyLine = Prefs.showStudyLine(getApplicationContext());
+        if (fen.equals(lastEngineFen) && strength == lastEngineStrength && choices == lastEngineChoices
+                && think == lastEngineThinkMs && studyLine == lastEngineStudyLine) {
             repushCurrentArrows(board);
             return;
         }
-        int think = Prefs.thinkMs(getApplicationContext());
         panelStatus("Thinking " + think + " ms…");
         try {
             long t0 = System.currentTimeMillis();
-            List<StockfishEngine.Pv> pvs = engine.analyze(fen, think, strength, choices);
+            List<StockfishEngine.Pv> pvs = engine.analyze(fen, think, strength, choices, studyLine);
             long dt = System.currentTimeMillis() - t0;
-            if (strength != Prefs.strengthElo(getApplicationContext()) || choices != Prefs.multiPv(getApplicationContext())) {
+            if (strength != Prefs.strengthElo(getApplicationContext()) || choices != Prefs.multiPv(getApplicationContext())
+                    || think != Prefs.thinkMs(getApplicationContext()) || studyLine != Prefs.showStudyLine(getApplicationContext())) {
                 invalidateAnalysis();
                 panelStatus("Analysis settings changed · updating");
                 return;
@@ -920,6 +927,8 @@ public class ScreenCaptureService extends Service {
             lastEngineFen = fen;
             lastEngineStrength = strength;
             lastEngineChoices = choices;
+            lastEngineThinkMs = think;
+            lastEngineStudyLine = studyLine;
             currentPvs = new ArrayList<>(pvs.subList(0, Math.min(choices, pvs.size())));
             currentArrows = buildArrows(currentPvs, board);
             lastDisplayedArrowFen = fen;

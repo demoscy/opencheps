@@ -100,4 +100,16 @@ public class PrefsTest {
         assertEquals(3, Prefs.multiPv(context));
     }
 
+    @Test public void fastThinkTimePersistsAndInvalidTimesAreClampedOrDefaulted() {
+        assertEquals(1500, Prefs.thinkMs(context));
+        Prefs.setThinkMs(context, 100);
+        Context fresh = context.createConfigurationContext(context.getResources().getConfiguration());
+        assertEquals(100, Prefs.thinkMs(fresh));
+        Prefs.setThinkMs(fresh, -50);
+        assertEquals(100, Prefs.thinkMs(context));
+        Prefs.get(context).edit().putInt(Prefs.KEY_THINK_MS, 10000).commit();
+        assertEquals(3000, Prefs.thinkMs(context));
+        Prefs.get(context).edit().putString(Prefs.KEY_THINK_MS, "bad").commit();
+        assertEquals(1500, Prefs.thinkMs(context));
+    }
 }

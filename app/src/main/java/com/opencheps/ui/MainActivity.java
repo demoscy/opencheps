@@ -72,10 +72,11 @@ public class MainActivity extends AppCompatActivity {
         sideBlack  = findViewById(R.id.sideBlack);
 
         SharedPreferences sp = Prefs.get(this);
-        int think = sp.getInt(Prefs.KEY_THINK_MS, 1500);
+        int think = Prefs.thinkMs(this);
         String side = sp.getString(Prefs.KEY_USER_SIDE, "w");
 
-        thinkBar.setMax(3000);
+        thinkBar.setMax(Prefs.MAX_THINK_MS);
+        thinkBar.setMin(Prefs.MIN_THINK_MS);
         thinkBar.setProgress(think);
         eloBar.setMax((Prefs.MAX_ELO - Prefs.MIN_ELO) / 10);
         eloBar.setProgress((Prefs.practiceElo(this) - Prefs.MIN_ELO) / 10);
@@ -95,9 +96,9 @@ public class MainActivity extends AppCompatActivity {
 
         thinkBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar b, int v, boolean u) {
-                int t = Math.max(300, v);
+                int t = Prefs.clampThinkMs(v);
                 thinkTv.setText(thinkLabelText(t));
-                sp.edit().putInt(Prefs.KEY_THINK_MS, t).apply();
+                Prefs.setThinkMs(MainActivity.this, t);
             }
             @Override public void onStartTrackingTouch(SeekBar b) {}
             @Override public void onStopTrackingTouch(SeekBar b) {}

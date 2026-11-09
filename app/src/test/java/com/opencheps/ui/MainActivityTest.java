@@ -41,4 +41,18 @@ public class MainActivityTest {
             assertFalse(((TextView) activity.findViewById(R.id.thinkLabel)).getText().toString().toLowerCase().contains("elo"));
         }
     }
+    @Test public void fastestThinkTimeIsSelectableAndSurvivesReopeningSettings() {
+        Prefs.get(RuntimeEnvironment.getApplication()).edit().clear().commit();
+        try (org.robolectric.android.controller.ActivityController<MainActivity> controller =
+                     Robolectric.buildActivity(MainActivity.class).setup()) {
+            SeekBar think = controller.get().findViewById(R.id.thinkBar);
+            assertEquals(100, think.getMin());
+            think.setProgress(0);
+            assertEquals(100, think.getProgress());
+            assertEquals(100, Prefs.thinkMs(controller.get()));
+            assertEquals("Think time: 100 ms", ((TextView) controller.get().findViewById(R.id.thinkLabel)).getText().toString());
+            controller.recreate();
+            assertEquals(100, ((SeekBar) controller.get().findViewById(R.id.thinkBar)).getProgress());
+        }
+    }
 }

@@ -66,6 +66,20 @@ Change Move choices between one and three on the same stationary position and
 verify the recommendation refreshes, distinct arrows appear, and the line still
 follows green. Relaunch to verify the choice count persists.
 
+For quicker puzzle or bot suggestions, set **Think time** to **100–300 ms** and
+disable **Show a 3-move study line**. The default remains 1500 ms; existing saved
+times are retained, with invalid values clamped to 100–3000 ms. The optional line
+performs its follow-up search only when enabled. Changing either setting refreshes
+an unchanged position, and a result using obsolete settings is discarded. Three
+candidate arrows are still available at the shorter search time. Capture, model
+inference, two matching frames and scheduling remain part of the total latency.
+The 100 ms setting is not a promise of a 100 ms response or human-like play.
+
+Phone speed check: on the same stationary puzzle/bot board, compare 1500 ms with
+100 ms and the line off. Then enable the line and verify it follows green;
+disable it again and verify it clears. Change time during a search and confirm
+the next result reflects the new value. Check persistence after reopening settings.
+
 ## Check a rejected board
 
 If an exactly calibrated, stationary board is still rejected, tap **Check board**.
@@ -170,7 +184,7 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-09: all 103 unit/Robolectric tests passed; both ARM debug APK
+Validation on 2026-11-09: all 111 unit/Robolectric tests passed; both ARM debug APK
 splits built; lint completed with zero errors and 53 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
@@ -188,8 +202,21 @@ truncated reports, selected-root preservation, settings changes during search,
 saved one-to-three choice counts, promotion formatting and continuation clearing.
 Preview tests cover crop ownership, pause/turn preservation, rotation cancellation
 and permission rejection. Recognition diagnostics retain rejected predictions for
-inspection while keeping them excluded from engine input. The reported stationary
-Chess.com rejection remains unverified without the failing crop/device evidence.
+inspection while keeping them excluded from engine input. The exact cause of the
+reported stationary Chess.com rejection has not been reproduced on a connected
+device. The user reports successful Daily and browser capture/analysis, while
+affected native-app modes produce black boards in both Check board and normal
+Android screenshots, including with entire-screen sharing. This suggests
+mode-specific capture protection or rendering; no particular Android restriction
+has been confirmed. Calibration cannot restore pixels absent from capture.
+
+Fast-search checks with the same production adapter and official host Stockfish 18
+returned legal, distinct root moves in 125–146 ms for 100 ms searches at full,
+1800 and 1320 strength, versus 1536 ms for a 1500 ms search on one test position.
+Recorded UCI commands confirmed no fixed-root follow-up when the study line was
+off. These are host engine measurements, not phone response-time guarantees or
+move-quality benchmarks. Unit tests cover the optional follow-up, missing-PV
+fallback, fast-time persistence and settings changes before/during analysis.
 
 Physical MediaProjection composition, ARM inference/Stockfish, Chess.com animation
 and Pixel 10 Pro XL touch/inset behavior cannot be confirmed by desktop tests.

@@ -111,7 +111,7 @@ public class ScreenCaptureServiceTest {
     @Test public void engineFailureDoesNotSuppressTheNextAttemptForTheSamePosition() {
         int[] queries = {0};
         StockfishEngine failing = new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) throws Exception {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices, boolean studyLine) throws Exception {
                 queries[0]++;
                 throw new java.io.IOException("test failure");
             }
@@ -164,7 +164,7 @@ public class ScreenCaptureServiceTest {
     @Test public void analysisResumesAfterOpeningAndMultipleComputerReplies() {
         List<String> queries = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices, boolean studyLine) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("g1f3", 20, false));
             }
@@ -199,7 +199,7 @@ public class ScreenCaptureServiceTest {
     @Test public void fastComputerReplyIsAcceptedWithoutKeepingOldArrows() {
         int[] queries = {0};
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices, boolean studyLine) {
                 queries[0]++;
                 return Collections.singletonList(new Pv("g1f3", 20, false));
             }
@@ -244,7 +244,7 @@ public class ScreenCaptureServiceTest {
     @Test public void adoptsAnExistingPuzzleAfterTwoFramesWithoutAnOpeningPosition() {
         List<String> queries = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices, boolean studyLine) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("c7g7", 0, false));
             }
@@ -333,7 +333,7 @@ public class ScreenCaptureServiceTest {
         ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
         ReflectionHelpers.setField(service, "turnExplicit", true);
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices, boolean studyLine) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("c3g3", 0, false));
             }
@@ -359,7 +359,7 @@ public class ScreenCaptureServiceTest {
         com.opencheps.util.Prefs.setMultiPv(service, 1);
         List<Integer> strengths = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices, boolean studyLine) {
                 strengths.add(elo);
                 return java.util.Arrays.asList(new Pv("e2e4", 20, false), new Pv("d2d4", 10, false));
             }
@@ -381,7 +381,7 @@ public class ScreenCaptureServiceTest {
     @Test public void changingPracticeStrengthDuringSearchDiscardsTheOldResultAndAllowsRetry() {
         com.opencheps.util.Prefs.setLimitStrength(service, false);
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices, boolean studyLine) {
                 if (elo == 0) {
                     com.opencheps.util.Prefs.setPracticeElo(service, 1700);
                     com.opencheps.util.Prefs.setLimitStrength(service, true);
@@ -405,7 +405,7 @@ public class ScreenCaptureServiceTest {
     @Test public void changingChoiceCountReanalyzesAnUnchangedPosition() {
         List<Integer> requested = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices, boolean studyLine) {
                 requested.add(choices);
                 return java.util.Arrays.asList(new Pv("e2e4", 20, false), new Pv("d2d4", 10, false), new Pv("g1f3", 5, false));
             }
@@ -420,6 +420,50 @@ public class ScreenCaptureServiceTest {
             assertEquals(choices, arrows.size());
         }
         assertEquals(java.util.Arrays.asList(1,3), requested);
+    }
+
+    @Test public void thinkTimeAndContinuationChangesRequeryTheSamePosition() {
+        List<String> requested = new ArrayList<>();
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices, boolean studyLine) {
+                requested.add(time + ":" + studyLine);
+                return Collections.singletonList(new Pv("e2e4", 20, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        BoardDetector.Board board = new BoardDetector.Board(0, 0, 320, 1);
+        com.opencheps.util.Prefs.setThinkMs(service, 1500);
+        com.opencheps.util.Prefs.setShowStudyLine(service, false);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        com.opencheps.util.Prefs.setThinkMs(service, 100);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        com.opencheps.util.Prefs.setShowStudyLine(service, true);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        assertEquals(java.util.Arrays.asList("1500:false", "100:false", "100:true"), requested);
+    }
+
+    @Test public void hidingTheStudyLineDuringSearchDiscardsItsResultAndRetriesWithoutExtraWork() {
+        List<Boolean> requested = new ArrayList<>();
+        com.opencheps.util.Prefs.setShowStudyLine(service, true);
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices, boolean studyLine) {
+                requested.add(studyLine);
+                com.opencheps.util.Prefs.setShowStudyLine(service, false);
+                return Collections.singletonList(new Pv("e2e4", 20, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        BoardDetector.Board board = new BoardDetector.Board(0, 0, 320, 1);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+        assertTrue(((List<?>) ReflectionHelpers.getField(service, "currentPvs")).isEmpty());
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        assertEquals(java.util.Arrays.asList(true, false), requested);
+        assertFalse(ReflectionHelpers.getField(service, "lastEngineStudyLine"));
+        assertFalse(((List<?>) ReflectionHelpers.getField(service, "currentPvs")).isEmpty());
     }
 
     @Test public void cachedPreviewIsAnIndependentExactCropAndClearsOnGeometryChange() throws Exception {

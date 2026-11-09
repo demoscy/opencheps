@@ -26,7 +26,7 @@ Match the grid to the exact 8×8 board.</string>
     <string name="position_flip">Flip board orientation</string>
     <string name="think_time">Think time: %1$d ms</string>
     <string name="think_time_default">Think time: 1500 ms</string>
-    <string name="think_time_help">More time allows a deeper search. It does not set an Elo rating.</string>
+    <string name="think_time_help">100–300 ms gives quicker, shallower suggestions; more time allows a deeper search. Capture and board confirmation add delay. Turn off the study line to skip its extra search. Search time does not set an Elo rating.</string>
     <string name="limit_practice_strength">Limit practice strength</string>
     <string name="practice_elo">Practice strength: %1$d Elo (approx.)</string>
     <string name="practice_elo_default">Practice strength: 1800 Elo (approx.)</string>

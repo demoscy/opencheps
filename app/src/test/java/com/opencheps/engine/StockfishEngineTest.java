@@ -135,4 +135,39 @@ public class StockfishEngineTest {
         assertTrue(commands.toString().contains("MultiPV value 3"));
     }
 
+    @Test public void fastSearchKeepsChosenMoveAndAlternativesWithoutSearchingForHiddenReplies() throws Exception {
+        StockfishEngine engine = engine("readyok\nreadyok\n"
+                + "info multipv 1 score cp 40 pv f2f3 g8f8 g1f1 f8e8 f3f4 e8d8\n"
+                + "info multipv 2 score cp 10 pv g2g3\nbestmove h2h3\n");
+        List<StockfishEngine.Pv> result = engine.analyze(fen, 100, 1800, 3, false);
+        assertEquals(3, result.size());
+        assertEquals("h2h3", result.get(0).uci);
+        assertEquals(Arrays.asList("h2h3"), result.get(0).moves);
+        assertFalse(result.get(0).hasScore);
+        assertEquals("f2f3", result.get(1).uci);
+        assertEquals("g2g3", result.get(2).uci);
+        assertTrue(commands.toString().contains("go movetime 100\n"));
+        assertFalse(commands.toString().contains("searchmoves"));
+        assertFalse(commands.toString().contains("UCI_LimitStrength value false"));
+    }
+
+    @Test public void fastShallowLineReturnsImmediatelyAndClampsTheRequestedTime() throws Exception {
+        StockfishEngine engine = engine("readyok\nreadyok\n"
+                + "info depth 1 score cp 12 pv g2g3 g8f8\nbestmove g2g3\n");
+        StockfishEngine.Pv result = engine.analyze(fen, 0, 0, 1, false).get(0);
+        assertEquals(Arrays.asList("g2g3", "g8f8"), result.moves);
+        assertEquals(12, result.cp);
+        assertTrue(commands.toString().contains("go movetime 100\n"));
+        assertFalse(commands.toString().contains("searchmoves"));
+    }
+
+    @Test public void enablingContinuationStillExtendsTheSameMoveAtTheFastestSetting() throws Exception {
+        StockfishEngine engine = engine("readyok\nreadyok\n"
+                + "info depth 1 score cp 12 pv g2g3\nbestmove g2g3\nreadyok\n"
+                + "info depth 12 score cp 18 pv g2g3 g8f8 g1f1 f8e8 f2f3 e8d8\nbestmove g2g3\n");
+        StockfishEngine.Pv result = engine.analyze(fen, 100, 1320, 1, true).get(0);
+        assertEquals("g2g3", result.uci);
+        assertEquals(6, result.moves.size());
+        assertTrue(commands.toString().contains("go movetime 100 searchmoves g2g3\n"));
+    }
 }

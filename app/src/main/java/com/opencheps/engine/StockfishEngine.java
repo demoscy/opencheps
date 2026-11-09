@@ -87,18 +87,23 @@ public class StockfishEngine {
 
     /** The actual selected move first, then distinct ranked alternatives when requested. */
     public synchronized List<Pv> analyze(String fen, int movetimeMs, int elo, int requestedChoices) throws Exception {
+        return analyze(fen, movetimeMs, elo, requestedChoices, true);
+    }
+
+    public synchronized List<Pv> analyze(String fen, int movetimeMs, int elo, int requestedChoices,
+                                         boolean includeContinuation) throws Exception {
         if (!ready) throw new IllegalStateException("engine not started");
         int choices = Math.max(1, Math.min(3, requestedChoices));
         setMultiPv(choices);
         setStrength(elo);
-        int time = Math.max(300, Math.min(3000, movetimeMs));
+        int time = Prefs.clampThinkMs(movetimeMs);
         send("ucinewgame");
         send("isready");
         waitFor("readyok", 6000);
         Search result = search(fen, time, null);
         if (result.move == null) return Collections.emptyList();
         Pv selected = result.lines.get(result.move);
-        if (selected == null || selected.moves.size() < 6 && !selected.mate) {
+        if (includeContinuation && (selected == null || selected.moves.size() < 6 && !selected.mate)) {
             // Strength limiting may pick a different move from the reported top PV.
             // Restrict a second search to that chosen move; never replace it with PV #1.
             // Handicap selection can truncate PVs even with only one root move. Analyze
