@@ -466,6 +466,49 @@ public class ScreenCaptureServiceTest {
         assertFalse(((List<?>) ReflectionHelpers.getField(service, "currentPvs")).isEmpty());
     }
 
+    @Test public void settingsPauseCaptureAndPublicationThenPreserveTurnAndNormalPause() {
+        ReflectionHelpers.setField(service, "worker", new Handler(Looper.getMainLooper()));
+        ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
+        ReflectionHelpers.setField(service, "boardSide", Side.BLACK);
+        com.opencheps.util.Prefs.setUserSide(service, "w");
+        for (boolean paused : new boolean[]{false, true}) {
+            ReflectionHelpers.setField(service, "paused", paused);
+            ScreenCaptureService.setSettingsVisible(true);
+            ShadowLooper.idleMainLooper();
+            AtomicInteger epoch = ReflectionHelpers.getField(service, "epoch");
+            ReflectionHelpers.setField(service, "frameEpoch", epoch.get());
+            assertFalse(ReflectionHelpers.callInstanceMethod(service, "canCapture", from(int.class, epoch.get())));
+            int[] published = {0};
+            ReflectionHelpers.callInstanceMethod(service, "publish", from(Runnable.class, () -> published[0]++));
+            ShadowLooper.idleMainLooper();
+            assertEquals(0, published[0]);
+            ScreenCaptureService.setSettingsVisible(false);
+            org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+            assertFalse(ReflectionHelpers.getField(service, "settingsVisible"));
+            assertEquals(paused, ReflectionHelpers.getField(service, "paused"));
+            assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "observedStm"));
+            assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "boardSide"));
+            assertEquals(!paused, ReflectionHelpers.callInstanceMethod(service, "canCapture", from(int.class, epoch.get())));
+        }
+    }
+
+    @Test public void rapidSettingsReentryCancelsAnOlderResumeAndChangedSideAppliesOnReturn() {
+        ReflectionHelpers.setField(service, "worker", new Handler(Looper.getMainLooper()));
+        com.opencheps.util.Prefs.setUserSide(service, "w");
+        ScreenCaptureService.setSettingsVisible(true);
+        ScreenCaptureService.setSettingsVisible(false);
+        ScreenCaptureService.setSettingsVisible(true);
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        assertTrue(ReflectionHelpers.getField(service, "settingsVisible"));
+        com.opencheps.util.Prefs.setUserSide(service, "b");
+        ScreenCaptureService.setSettingsVisible(false);
+        org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+        assertFalse(ReflectionHelpers.getField(service, "settingsVisible"));
+        assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "userSide"));
+        assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "boardSide"));
+        assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "observedStm"));
+    }
+
     @Test public void cachedPreviewIsAnIndependentExactCropAndClearsOnGeometryChange() throws Exception {
         Bitmap frame = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888);
         frame.eraseColor(android.graphics.Color.MAGENTA);

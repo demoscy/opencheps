@@ -7,6 +7,8 @@ import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -15,6 +17,7 @@ import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.view.View;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -27,7 +30,14 @@ import com.opencheps.util.Prefs;
 
 public class MainActivity extends AppCompatActivity {
 
-    private Button btnOverlay, btnStart, btnStop;
+    private Button btnOverlay, btnStart, btnStop, btnReturn;
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Runnable refreshSession = new Runnable() {
+        @Override public void run() {
+            updateSessionControls();
+            ui.postDelayed(this, 500);
+        }
+    };
     private TextView statusTv, thinkTv, eloTv;
     private SeekBar thinkBar, eloBar;
     private RadioGroup sideGroup;
@@ -62,6 +72,8 @@ public class MainActivity extends AppCompatActivity {
         btnOverlay = findViewById(R.id.btnOverlay);
         btnStart   = findViewById(R.id.btnStart);
         btnStop    = findViewById(R.id.btnStop);
+        btnReturn = findViewById(R.id.btnReturnToBoard);
+        btnReturn.setOnClickListener(v -> moveTaskToBack(true));
         statusTv   = findViewById(R.id.status);
         thinkTv    = findViewById(R.id.thinkLabel);
         eloTv = findViewById(R.id.eloLabel);
@@ -131,6 +143,7 @@ public class MainActivity extends AppCompatActivity {
 
         btnOverlay.setOnClickListener(v -> requestOverlay());
         btnStart.setOnClickListener(v -> {
+            if (ScreenCaptureService.isRunning()) return;
             if (!Settings.canDrawOverlays(this)) { toast("Grant overlay permission first"); return; }
             // Android offers either a single app or the entire display. Capture callbacks map
             // full-screen app content (excluding system bars) back to the overlay's screen origin.
@@ -158,7 +171,28 @@ public class MainActivity extends AppCompatActivity {
         btnOverlay.setText(overlay
                 ? getString(R.string.overlay_granted)
                 : getString(R.string.grant_overlay));
-        btnStart.setEnabled(overlay);
+        sideGroup.check("b".equals(Prefs.userSide(this)) ? R.id.sideBlack : R.id.sideWhite);
+        updateSessionControls();
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        ScreenCaptureService.setSettingsVisible(true);
+        ui.post(refreshSession);
+    }
+
+    @Override protected void onStop() {
+        ui.removeCallbacks(refreshSession);
+        ScreenCaptureService.setSettingsVisible(false);
+        super.onStop();
+    }
+
+    private void updateSessionControls() {
+        boolean running = ScreenCaptureService.isRunning();
+        btnStart.setEnabled(!running && Settings.canDrawOverlays(this));
+        btnStop.setEnabled(running);
+        btnReturn.setVisibility(running ? View.VISIBLE : View.GONE);
+        statusTv.setText(running ? R.string.settings_running : R.string.status_idle);
     }
 
     private void requestOverlay() {

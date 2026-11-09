@@ -55,4 +55,43 @@ public class MainActivityTest {
             assertEquals(100, ((SeekBar) controller.get().findViewById(R.id.thinkBar)).getProgress());
         }
     }
+    @Test public void activeCaptureSettingsKeepTheGrantAndDisableStartingASecondProjection() {
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        org.robolectric.android.controller.ServiceController<com.opencheps.capture.ScreenCaptureService> capture =
+                Robolectric.buildService(com.opencheps.capture.ScreenCaptureService.class).create();
+        // A session token stand-in: Robolectric cannot supply a real capture consent grant.
+        android.media.projection.MediaProjection projection = org.robolectric.shadow.api.Shadow.newInstanceOf(
+                android.media.projection.MediaProjection.class);
+        assertNotNull(projection);
+        org.robolectric.util.ReflectionHelpers.setField(capture.get(), "projection", projection);
+        org.robolectric.util.ReflectionHelpers.setField(capture.get(), "worker", new android.os.Handler(android.os.Looper.getMainLooper()));
+        try (org.robolectric.android.controller.ActivityController<MainActivity> controller =
+                     Robolectric.buildActivity(MainActivity.class).setup()) {
+            MainActivity activity = controller.get();
+            assertFalse(activity.findViewById(R.id.btnStart).isEnabled());
+            assertTrue(activity.findViewById(R.id.btnStop).isEnabled());
+            assertEquals(android.view.View.VISIBLE, activity.findViewById(R.id.btnReturnToBoard).getVisibility());
+            assertTrue(org.robolectric.util.ReflectionHelpers.getField(capture.get(), "settingsVisible"));
+            ((SeekBar) activity.findViewById(R.id.thinkBar)).setProgress(100);
+            controller.recreate();
+            assertTrue(org.robolectric.util.ReflectionHelpers.getField(capture.get(), "settingsVisible"));
+            controller.pause().stop();
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+            assertFalse(org.robolectric.util.ReflectionHelpers.getField(capture.get(), "settingsVisible"));
+            assertSame(projection, org.robolectric.util.ReflectionHelpers.getField(capture.get(), "projection"));
+            assertEquals(100, Prefs.thinkMs(capture.get()));
+            controller.start().resume();
+            org.robolectric.util.ReflectionHelpers.setField(capture.get(), "projection", null);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(600));
+            assertTrue(controller.get().findViewById(R.id.btnStart).isEnabled());
+            assertFalse(controller.get().findViewById(R.id.btnStop).isEnabled());
+            assertEquals(android.view.View.GONE, controller.get().findViewById(R.id.btnReturnToBoard).getVisibility());
+        } finally {
+            // This test injects the main looper, not a real capture worker/thread.
+            org.robolectric.util.ReflectionHelpers.setField(capture.get(), "worker", null);
+            org.robolectric.util.ReflectionHelpers.setField(capture.get(), "projection", null);
+            capture.destroy();
+        }
+        assertFalse(com.opencheps.capture.ScreenCaptureService.isRunning());
+    }
 }

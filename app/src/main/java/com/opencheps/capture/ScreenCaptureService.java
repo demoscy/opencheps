@@ -64,6 +64,7 @@ public class ScreenCaptureService extends Service {
     public static final String EXTRA_RESULT_DATA = "result_data";
     public static final String EXTRA_USER_SIDE   = "user_side";
     public static final String ACTION_STOP       = "com.opencheps.STOP";
+    private static volatile ScreenCaptureService instance;
 
     private static final long    SAMPLE_PERIOD_MS = 500;
 
@@ -82,6 +83,8 @@ public class ScreenCaptureService extends Service {
     private int screenW, screenH;
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean editing, stopping;
+    private volatile boolean settingsVisible;
+    private final AtomicInteger settingsGeneration = new AtomicInteger();
     private final AtomicInteger epoch = new AtomicInteger();
     private int frameEpoch, displayRotation;
     private long captureNotBefore;
@@ -122,6 +125,77 @@ public class ScreenCaptureService extends Service {
     private List<ArrowOverlayView.Arrow> currentArrows = new ArrayList<>();
 
     @Nullable @Override public IBinder onBind(Intent i) { return null; }
+
+    @Override public void onCreate() {
+        super.onCreate();
+        instance = this;
+    }
+
+    public static boolean isRunning() {
+        ScreenCaptureService service = instance;
+        return service != null && !service.stopping && service.projection != null;
+    }
+
+    /** In-process activity lifecycle notification. Never starts a service or reuses a grant. */
+    public static void setSettingsVisible(boolean visible) {
+        ScreenCaptureService service = instance;
+        if (service != null) service.settingsVisibilityChanged(visible);
+    }
+
+    private void settingsVisibilityChanged(boolean visible) {
+        if (stopping || worker == null) return;
+        int generation = settingsGeneration.incrementAndGet();
+        if (visible) {
+            settingsVisible = true;
+            epoch.incrementAndGet();
+            OverlayService.setSettingsVisible(true);
+            OverlayService.cancelCalibration();
+            FloatingPanel panel = OverlayService.panel();
+            if (panel != null) panel.setEval("");
+            worker.post(() -> {
+                if (stopping) return;
+                detachCaptureSurface();
+                drainReader();
+                invalidateAnalysis();
+                candidateGrid = null;
+                candidateRepeats = 0;
+            });
+        } else if (settingsVisible) {
+            // Wait for our own activity to leave the compositor before accepting frames.
+            main.postDelayed(() -> {
+                if (stopping || worker == null || settingsGeneration.get() != generation) return;
+                worker.post(() -> {
+                    if (stopping || settingsGeneration.get() != generation) return;
+                    Side selected = "b".equals(Prefs.userSide(this)) ? Side.BLACK : Side.WHITE;
+                    if (selected != userSide) {
+                        userSide = selected;
+                        boardSide = selected;
+                        resetGameState();
+                    }
+                    invalidateAnalysis();
+                    candidateGrid = null;
+                    candidateRepeats = 0;
+                    cleanReference = null;
+                    nextCleanAllowed = 0;
+                    drainReader();
+                    captureNotBefore = System.nanoTime();
+                    Side side = userSide, turn = observedStm, bottom = boardSide;
+                    main.post(() -> {
+                        if (stopping || settingsGeneration.get() != generation) return;
+                        epoch.incrementAndGet();
+                        settingsVisible = false;
+                        OverlayService.setSettingsVisible(false);
+                        FloatingPanel panel = OverlayService.panel();
+                        if (panel != null) {
+                            panel.setUserSide(side);
+                            panel.setPosition(turn, bottom);
+                            panel.setStatus(paused ? "Paused" : "Settings updated");
+                        }
+                    });
+                });
+            }, 250);
+        }
+    }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
@@ -307,7 +381,7 @@ public class ScreenCaptureService extends Service {
     }
 
     private void beginBoardPreview() {
-        if (editing || stopping || worker == null) return;
+        if (editing || settingsVisible || stopping || worker == null) return;
         editing = true;
         previewEditing = true;
         int expected = epoch.incrementAndGet();
@@ -377,9 +451,9 @@ public class ScreenCaptureService extends Service {
     }
 
     private void beginCalibration() {
-        if (editing || stopping || worker == null) return;
+        if (editing || settingsVisible || stopping || worker == null) return;
         editing = true;
-        epoch.incrementAndGet();
+        int expected = epoch.incrementAndGet();
         OverlayService.suspendForCalibration();
         worker.post(() -> {
             if (stopping) return;
@@ -401,8 +475,10 @@ public class ScreenCaptureService extends Service {
                 }
                 int width = screenW, height = screenH, rotation = displayRotation;
                 main.post(() -> {
-                    if (!stopping && editing) OverlayService.showCalibration(width, height, rotation,
-                            initial, this::finishCalibration);
+                    if (!stopping && editing) {
+                        if (settingsVisible || epoch.get() != expected) finishCalibration(false, null);
+                        else OverlayService.showCalibration(width, height, rotation, initial, this::finishCalibration);
+                    }
                 });
             } catch (RuntimeException e) {
                 Log.e(TAG, "Could not suspend capture for calibration", e);
@@ -481,7 +557,7 @@ public class ScreenCaptureService extends Service {
                 main.post(() -> { if (!stopping) systemInsets = OverlayService.displayInsets(); });
                 refreshDisplayGeometry();
                 frameEpoch = epoch.get();
-                if (paused || editing) drainReader();
+                if (paused || editing || settingsVisible) drainReader();
                 else if (!capturedContentVisible) {
                     invalidateAnalysis();
                     panelStatus("Shared app not visible · waiting");
@@ -520,7 +596,7 @@ public class ScreenCaptureService extends Service {
     }
 
     private boolean canCapture(int expected) {
-        return !stopping && !paused && !editing && capturedContentVisible && epoch.get() == expected;
+        return !stopping && !paused && !editing && !settingsVisible && capturedContentVisible && epoch.get() == expected;
     }
 
     /** App-only frames exclude other apps' windows. Whole-display probes only detect change. */
@@ -1035,7 +1111,7 @@ public class ScreenCaptureService extends Service {
     private void publish(Runnable action) {
         int expected = frameEpoch;
         main.post(() -> {
-            if (!stopping && !editing && !paused && epoch.get() == expected) action.run();
+            if (!stopping && !editing && !settingsVisible && !paused && epoch.get() == expected) action.run();
         });
     }
 
@@ -1204,6 +1280,7 @@ public class ScreenCaptureService extends Service {
 
     @Override public void onDestroy() {
         stopping = true;
+        if (instance == this) instance = null;
         epoch.incrementAndGet();
         main.removeCallbacksAndMessages(null);
         OverlayService.cancelCalibration();

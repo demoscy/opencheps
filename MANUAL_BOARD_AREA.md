@@ -33,6 +33,37 @@ or Internet permission. Screenshots remain in memory and are never saved/uploade
    fits, **Set board area** in that layout. This does not infer unknown new board
    bounds, and recognition confidence is not a guarantee of correctness.
 
+## Bubble and settings during capture
+
+Tap **Minimize** to reduce the controls to a draggable 48 dp bubble. Tap it to
+restore the panel. Drag the panel title to move expanded controls. Minimizing
+does not pause analysis or hide move arrows; the existing Pause state remains.
+The bubble is hidden for clean entire-screen captures, just like the full panel,
+and only its current bounds are masked in change probes. Rotation clamps the
+bubble to the new usable display; the expanded card scrolls on short screens.
+
+Tap **Settings** to bring the existing app screen forward. Capture permission
+remains active while analysis and overlays pause. Change settings and use
+**Return to board**, Back or switch apps. A compositor delay, fresh-frame check
+and epoch barrier prevent the settings screen or obsolete results entering
+analysis. The current pause/turn/orientation are preserved unless the selected
+analysis side changes, which resets position/orientation as the panel toggle does.
+The app disables Start while a capture session exists and updates its controls if
+capture stops. Rotation/recreation and quick reentry cancel older resume tasks.
+
+Phone checks:
+
+- Minimize while running and paused. Drag to all edges; tap to expand. Arrows
+  continue only when running, and a drag/cancel should not expand the bubble.
+- Rotate with the bubble visible. Expand in landscape and check scrolling and
+  Stop/Settings access. Test large display/text sizes and navigation gestures.
+- Open Settings without stopping capture. Change think time, choices, strength,
+  line and side; Return to board and check the changes. Confirm no new capture
+  permission dialog, stale arrows or analysis of the settings page.
+- Repeat with normal Pause enabled; it must remain paused. Try rapid reopen/Back,
+  Home, rotation in Settings, notification Stop and overlay permission revocation.
+  No bubble/panel should remain after Stop. A new session starts expanded.
+
 ## Practice strength and study line
 
 In OpenCheps settings, **Move choices** selects one to three candidate arrows,
@@ -184,8 +215,8 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-09: all 111 unit/Robolectric tests passed; both ARM debug APK
-splits built; lint completed with zero errors and 53 warnings. `git diff --check`
+Validation on 2026-11-09: all 129 unit/Robolectric tests passed; both ARM debug APK
+splits built; lint completed with zero errors and 54 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
 are desktop build/test evidence, not a physical-device acceptance result.
@@ -217,6 +248,14 @@ Recorded UCI commands confirmed no fixed-root follow-up when the study line was
 off. These are host engine measurements, not phone response-time guarantees or
 move-quality benchmarks. Unit tests cover the optional follow-up, missing-PV
 fallback, fast-time persistence and settings changes before/during analysis.
+
+Bubble/settings tests cover tap versus drag/cancel, 48 dp measured bounds,
+screen-edge/resize clamping, scrolling on short displays, clean-frame visibility,
+the minimized capture mask, explicit Settings launch, capture/publication guards,
+pause/turn preservation and stale resume cancellation. Activity tests use a
+simulated projection token to verify retaining a session across settings and
+recreation and disabling a second capture. Real MediaProjection and phone gestures
+still require the device checks above; no new permissions were added.
 
 Physical MediaProjection composition, ARM inference/Stockfish, Chess.com animation
 and Pixel 10 Pro XL touch/inset behavior cannot be confirmed by desktop tests.

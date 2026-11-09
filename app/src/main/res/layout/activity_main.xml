@@ -99,6 +99,14 @@
             android:layout_height="1dp"/>
 
         <Button
+            android:id="@+id/btnReturnToBoard"
+            android:text="@string/return_to_board"
+            android:minHeight="48dp"
+            android:visibility="gone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
+        <Button
             android:id="@+id/btnOverlay"
             android:text="@string/grant_overlay"
             android:backgroundTint="#FF1B5E20"

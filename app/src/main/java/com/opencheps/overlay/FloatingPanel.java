@@ -2,21 +2,23 @@ package com.opencheps.overlay;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.PixelFormat;
+import android.content.Intent;
 import android.graphics.Rect;
 import android.widget.Button;
-import android.os.Build;
 import android.os.Looper;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Toast;
+import android.util.DisplayMetrics;
 
 import com.opencheps.R;
 import com.opencheps.util.Side;
+import com.opencheps.ui.MainActivity;
 
 public class FloatingPanel {
 
@@ -31,6 +33,8 @@ public class FloatingPanel {
     private boolean paused = false;
     private Side userSide = Side.WHITE;
     private int screenW, screenH;
+    private boolean minimized, positioned;
+    private View expanded, bubble;
 
     public interface Listener {
         void onPauseToggle(boolean paused);
@@ -55,6 +59,16 @@ public class FloatingPanel {
     public boolean attach() {
         if (root != null) return true;
         root = LayoutInflater.from(ctx).inflate(R.layout.floating_panel, null);
+        expanded = root.findViewById(R.id.panelExpanded);
+        bubble = root.findViewById(R.id.panelBubble);
+        root.findViewById(R.id.panelMinimize).setOnClickListener(v -> setMinimized(true));
+        bubble.setOnClickListener(v -> setMinimized(false));
+        root.findViewById(R.id.panelSettings).setOnClickListener(v -> {
+            try {
+                ctx.startActivity(new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            } catch (RuntimeException e) { Toast.makeText(ctx, R.string.settings_open_failed, Toast.LENGTH_SHORT).show(); }
+        });
         statusTv    = root.findViewById(R.id.panelStatus);
         evalTv      = root.findViewById(R.id.panelEval);
         continuationTv = root.findViewById(R.id.panelContinuation);
@@ -75,6 +89,7 @@ public class FloatingPanel {
             toggleBtn.setImageResource(paused
                     ? android.R.drawable.ic_media_play
                     : android.R.drawable.ic_media_pause);
+            bubble.setContentDescription(ctx.getString(paused ? R.string.panel_expand_paused : R.string.panel_expand));
             if (listener != null) listener.onPauseToggle(paused);
         });
         stopBtn.setOnClickListener(v -> {
@@ -92,48 +107,54 @@ public class FloatingPanel {
         sideWhiteTv.setOnClickListener(v -> chooseSide(Side.WHITE));
         sideBlackTv.setOnClickListener(v -> chooseSide(Side.BLACK));
 
-        int type = Build.VERSION.SDK_INT >= 26
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE;
-        lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                type,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.TOP | Gravity.START;
-        lp.x = 16;
-        lp.y = 80;
+        // Match the arrow/editor origin; clamp the smaller window within the safe screen.
+        lp = OverlayWindow.fullScreen(true);
+        lp.width = lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        lp.flags &= ~WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
+        DisplayMetrics display = new DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(display);
+        screenW = display.widthPixels;
+        screenH = display.heightPixels;
+        lp.x = dp(8);
+        lp.y = dp(40);
 
-        root.setOnTouchListener(new View.OnTouchListener() {
+        View.OnTouchListener drag = new View.OnTouchListener() {
             float dx, dy; int sx, sy; boolean dragging;
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
+                        if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(true);
                         dx = e.getRawX(); dy = e.getRawY();
                         sx = lp.x; sy = lp.y;
                         dragging = false;
-                        return false;
+                        return true;
                     case MotionEvent.ACTION_MOVE:
                         float dist = (float) Math.hypot(e.getRawX() - dx, e.getRawY() - dy);
-                        if (dist > 16) {
+                        if (dragging || dist > ViewConfiguration.get(ctx).getScaledTouchSlop()) {
                             dragging = true;
                             lp.x = sx + (int) (e.getRawX() - dx);
                             lp.y = sy + (int) (e.getRawY() - dy);
+                            clampPosition();
                             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
                             return true;
                         }
-                        return false;
+                        return true;
                     case MotionEvent.ACTION_UP:
+                        if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(false);
+                        if (!dragging) v.performClick();
+                        return true;
                     case MotionEvent.ACTION_CANCEL:
-                        return dragging;
+                        if (v.getParent() != null) v.getParent().requestDisallowInterceptTouchEvent(false);
+                        return true;
                     default:
-                        return false;
+                        return true;
                 }
             }
-        });
+        };
+        root.setOnTouchListener(drag);
+        root.findViewById(R.id.panelDragHandle).setOnTouchListener(drag);
+        bubble.setOnTouchListener(drag);
+        root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> clampPosition());
 
         try { wm.addView(root, lp); }
         catch (Exception e) { root = null; return false; }
@@ -171,17 +192,57 @@ public class FloatingPanel {
     }
 
     public void placeBottomLeft(int screenWidth, int screenHeight) {
+        if (screenWidth <= 0 || screenHeight <= 0) return;
+        if (positioned && lp != null && screenW > 0 && screenH > 0) {
+            lp.x = Math.round(lp.x * (float) screenWidth / screenW);
+            lp.y = Math.round(lp.y * (float) screenHeight / screenH);
+        }
         this.screenW = screenWidth;
         this.screenH = screenHeight;
         if (root == null || lp == null) return;
         root.post(() -> {
+            if (root == null) return;
+            lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
             int h = root.getHeight();
-            if (h <= 0) h = 180;
-            lp.x = 16;
-            lp.y = Math.max(40, screenHeight - h - 200);
+            if (!positioned) {
+                lp.x = dp(8);
+                lp.y = screenH - h - dp(48);
+                positioned = true;
+            }
             try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+            clampPosition();
         });
     }
+
+    private int dp(int value) { return Math.round(value * ctx.getResources().getDisplayMetrics().density); }
+
+    private void clampPosition() {
+        if (root == null || lp == null) return;
+        Rect safe = OverlayService.displayInsets();
+        int heightLimit = Math.max(dp(48), screenH - safe.top - safe.bottom);
+        if (!minimized && root.getHeight() > heightLimit && lp.height != heightLimit) {
+            lp.height = heightLimit; // Expanded controls scroll on short/landscape displays.
+            try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+        }
+        int x = Math.max(safe.left, Math.min(lp.x, screenW - safe.right - root.getWidth()));
+        int y = Math.max(safe.top, Math.min(lp.y, screenH - safe.bottom - root.getHeight()));
+        if (x == lp.x && y == lp.y) return;
+        lp.x = x; lp.y = y;
+        try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+    }
+
+    public void setMinimized(boolean value) {
+        if (root == null) return;
+        minimized = value;
+        expanded.setVisibility(value ? View.GONE : View.VISIBLE);
+        bubble.setVisibility(value ? View.VISIBLE : View.GONE);
+        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
+        root.requestLayout();
+        root.post(this::clampPosition);
+    }
+
+    public boolean isMinimized() { return minimized; }
 
     public void setPosition(Side sideToMove, Side bottom) {
         turn = sideToMove;

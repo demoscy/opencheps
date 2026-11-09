@@ -26,6 +26,23 @@ A still image cannot reliably provide turn, castling rights or en-passant histor
 The existing FEN builder supplies no castling/en-passant rights. An unrelated
 puzzle/history jump can require Read current position and Turn selection.
 
+## Compact controls and settings
+
+**Minimize** replaces the floating panel with a draggable 48 dp OpenCheps bubble.
+Tap the bubble to expand it; drag the panel title or bubble to reposition it.
+Minimizing keeps analysis, arrows and the existing Pause state. The bubble stays
+minimized across background transitions and rotation in the current session.
+Controls are clamped away from system bars/cutouts; the expanded panel scrolls
+when the display is short. A new capture session starts with the expanded panel.
+
+**Settings** opens the existing OpenCheps app without stopping MediaProjection.
+The overlay hides and analysis pauses while the app screen is visible. Change
+think time, strength, move choices, study line or side, then tap **Return to board**
+or leave the app to resume. Normal Pause is preserved; changing the selected side
+uses the same orientation/position reset as the panel side toggle. Other settings
+retain turn and board orientation. Starting a second capture is disabled while a
+session is active. No new permissions or background service starts are needed.
+
 ## Study controls
 
 **Move choices** selects **one to three candidate arrows**, defaulting to three.

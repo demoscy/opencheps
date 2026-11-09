@@ -38,6 +38,7 @@ public class OverlayService extends Service {
     private CalibrationListener calibrationListener;
     private boolean suspended;
     private boolean capturing;
+    private boolean settingsVisible;
 
     public interface CalibrationListener {
         // changed=false means CANCEL, changed=true and area=null means AUTO.
@@ -140,9 +141,17 @@ public class OverlayService extends Service {
     }
 
     private void updateVisibility() {
-        boolean visible = !suspended && !capturing;
+        boolean visible = !suspended && !capturing && !settingsVisible;
         arrows.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
         panel.setVisible(visible);
+    }
+
+    public static void setSettingsVisible(boolean visible) {
+        OverlayService service = instance;
+        if (service == null) return;
+        service.settingsVisible = visible;
+        if (visible) service.arrows.clearAll();
+        service.updateVisibility();
     }
 
     /** Visible system bars describe the on-screen origin of a normal full-screen shared app. */
@@ -194,6 +203,9 @@ public class OverlayService extends Service {
         super.onConfigurationChanged(config);
         finishPreview();
         finishCalibration(false, null);
+        android.util.DisplayMetrics display = new android.util.DisplayMetrics();
+        wm.getDefaultDisplay().getRealMetrics(display);
+        if (panel != null) panel.placeBottomLeft(display.widthPixels, display.heightPixels);
     }
 
     @Override public void onDestroy() {
@@ -212,7 +224,7 @@ public class OverlayService extends Service {
     private static void render(java.util.function.Consumer<ArrowOverlayView> update) {
         Runnable task = () -> {
             OverlayService s = instance;
-            if (s != null && !s.suspended) update.accept(s.arrows);
+            if (s != null && !s.suspended && !s.settingsVisible) update.accept(s.arrows);
         };
         if (Looper.myLooper() == Looper.getMainLooper()) task.run();
         else MAIN.post(task);

@@ -130,6 +130,41 @@ public class OverlayServiceTest {
         ArrowOverlayView arrows = ReflectionHelpers.getField(controller.get(), "arrows");
         assertEquals(View.VISIBLE, arrows.getVisibility());
     }
+    @Test @Config(sdk = 34)
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void minimizedPanelMasksOnlyTheBubbleRatherThanTheExpandedCard() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        FloatingPanel panel = OverlayService.panel();
+        panel.setMinimized(true);
+        View root = ReflectionHelpers.getField(panel, "root");
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.AT_MOST));
+        root.layout(0, 0, root.getMeasuredWidth(), root.getMeasuredHeight());
+        int[] mask = OverlayService.captureMask(400, 800,
+                com.opencheps.util.CaptureViewport.resolve(400,800,0,0,0,0,0,0));
+        int opaque = 0;
+        for (int pixel : mask) if ((pixel >>> 24) != 0) opaque++;
+        assertTrue(opaque > 0);
+        assertTrue(opaque <= root.getWidth()*root.getHeight());
+        assertEquals(Math.round(48*root.getResources().getDisplayMetrics().density), root.getWidth());
+    }
+
+    @Test public void settingsVisibilityKeepsBubbleHiddenWhenACleanFrameFinishes() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        FloatingPanel panel = OverlayService.panel();
+        panel.setMinimized(true);
+        View root = ReflectionHelpers.getField(panel, "root");
+        OverlayService.setSettingsVisible(true);
+        OverlayService.setCapturing(false);
+        OverlayService.resumeAfterCalibration();
+        assertEquals(View.INVISIBLE, root.getVisibility());
+        OverlayService.setSettingsVisible(false);
+        assertEquals(View.VISIBLE, root.getVisibility());
+        assertTrue(panel.isMinimized());
+    }
+
     @Test public void rejectedPreviewReleasesUnattachedBitmapWithoutAnOrphanWindow() {
         ShadowSettings.setCanDrawOverlays(false);
         controller = Robolectric.buildService(OverlayService.class).create();
