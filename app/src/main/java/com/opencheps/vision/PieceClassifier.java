@@ -1,219 +1,111 @@
 package com.opencheps.vision;
 
+import android.content.Context;
 import android.graphics.Bitmap;
-import android.util.Log;
 
-import com.opencheps.util.Side;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.nio.FloatBuffer;
+import java.util.Collections;
 
-public class PieceClassifier {
+import ai.onnxruntime.OnnxTensor;
+import ai.onnxruntime.OrtEnvironment;
+import ai.onnxruntime.OrtException;
+import ai.onnxruntime.OrtSession;
 
-    private static final String TAG = "OC/Classifier";
+/** Offline 13-class tile CNN. No starting-position templates or frame-label reuse. */
+public final class PieceClassifier implements AutoCloseable {
+    private static final String MODEL = "piece-model/chess-tiles-v2.onnx";
+    private static final char[] LABELS = ".KQRBNPkqrbnp".toCharArray();
+    private static final float MIN_CONFIDENCE = 0.70f;
+    private final OrtEnvironment environment;
+    private final OrtSession session;
 
-    private static final char[] START_WHITE_POV = {
-        'r','n','b','q','k','b','n','r',
-        'p','p','p','p','p','p','p','p',
-        '.','.','.','.','.','.','.','.',
-        '.','.','.','.','.','.','.','.',
-        '.','.','.','.','.','.','.','.',
-        '.','.','.','.','.','.','.','.',
-        'P','P','P','P','P','P','P','P',
-        'R','N','B','Q','K','B','N','R'
-    };
-
-    private SquareSampler.Sample[] templates;
-    private SquareSampler.Sample[] previousFrame;
-    private char[] previousLabels;
-    private char[] labels;
-    private float emptyEdgeMax;
-    private float occupiedEdgeMin;
-    private float pieceColorThreshold;
-    private float frameChangeThreshold;
-    private float whitePieceLumAvg;
-    private float blackPieceLumAvg;
-    private boolean trained;
-    private Side bootstrapSide;
-
-    public boolean isTrained() { return trained; }
-    public Side bootstrapSide() { return bootstrapSide; }
-
-    public synchronized boolean tryBootstrap(Bitmap bmp, BoardDetector.Board board) {
-        if (board == null) return false;
-        SquareSampler.Sample[] samples = sampleAll(bmp, board);
-        if (samples == null) return false;
-
-        float maxEmptyEdge = 0;
-        int emptyCount = 0;
-        for (int r = 2; r <= 5; r++) for (int f = 0; f < 8; f++) {
-            float e = samples[r * 8 + f].edgeEnergy;
-            if (e > maxEmptyEdge) maxEmptyEdge = e;
-            emptyCount++;
+    public PieceClassifier(Context context) throws Exception {
+        byte[] bytes;
+        try (InputStream in = context.getAssets().open(MODEL);
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int n;
+            while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+            bytes = out.toByteArray();
         }
-
-        float minOccupiedEdge = Float.MAX_VALUE;
-        int occCount = 0;
-        for (int r = 0; r < 8; r++) {
-            if (r >= 2 && r <= 5) continue;
-            for (int f = 0; f < 8; f++) {
-                float e = samples[r * 8 + f].edgeEnergy;
-                if (e < minOccupiedEdge) minOccupiedEdge = e;
-                occCount++;
-            }
-        }
-
-        if (minOccupiedEdge <= 0.0001f || minOccupiedEdge < maxEmptyEdge * 1.5f) {
-            Log.i(TAG, "bootstrap reject: minOccupied=" + minOccupiedEdge
-                    + " maxEmpty=" + maxEmptyEdge);
-            return false;
-        }
-
-        emptyEdgeMax = maxEmptyEdge;
-        occupiedEdgeMin = minOccupiedEdge;
-        pieceColorThreshold = (maxEmptyEdge + minOccupiedEdge) * 0.5f;
-
-        float topLumSum = 0, botLumSum = 0;
-        int topN = 0, botN = 0;
-        for (int f = 0; f < 8; f++) {
-            for (int r : new int[]{0, 1}) {
-                topLumSum += samples[r * 8 + f].meanLum;
-                topN++;
-            }
-            for (int r : new int[]{6, 7}) {
-                botLumSum += samples[r * 8 + f].meanLum;
-                botN++;
-            }
-        }
-        if (topN == 0 || botN == 0) return false;
-        float topAvg = topLumSum / topN;
-        float botAvg = botLumSum / botN;
-        Side side = botAvg > topAvg ? Side.WHITE : Side.BLACK;
-
-        char[] map = side == Side.WHITE ? START_WHITE_POV : flipLabels(START_WHITE_POV);
-        templates = samples;
-        labels = map;
-        bootstrapSide = side;
-
-        float whiteSum = 0; int whiteN = 0;
-        float blackSum = 0; int blackN = 0;
-        for (int i = 0; i < 64; i++) {
-            char c = labels[i];
-            if (c == '.') continue;
-            float lum = samples[i].contrastLum;
-            if (Character.isUpperCase(c)) { whiteSum += lum; whiteN++; }
-            else                          { blackSum += lum; blackN++; }
-        }
-        whitePieceLumAvg = whiteN > 0 ? whiteSum / whiteN : 0.7f;
-        blackPieceLumAvg = blackN > 0 ? blackSum / blackN : 0.3f;
-
-        previousFrame = samples;
-        previousLabels = new char[64];
-        for (int i = 0; i < 64; i++) previousLabels[i] = labels[i];
-
-        float maxBootstrapNoise = 0;
-        for (int i = 0; i < 64; i++) {
-            if (labels[i] != '.') continue;
-            for (int j = i + 1; j < 64; j++) {
-                if (labels[j] != '.') continue;
-                if ((((i/8)+(i%8))&1) != (((j/8)+(j%8))&1)) continue;
-                float d = SquareSampler.lumDistance(samples[i].feature, samples[j].feature);
-                if (d > maxBootstrapNoise) maxBootstrapNoise = d;
-            }
-        }
-        frameChangeThreshold = Math.max(0.3f, maxBootstrapNoise * 2.0f + 0.1f);
-
-        trained = true;
-        Log.i(TAG, "BOOTSTRAPPED side=" + side
-                + " emptyMax=" + maxEmptyEdge
-                + " occMin=" + minOccupiedEdge
-                + " thr=" + pieceColorThreshold
-                + " frameChangeThr=" + frameChangeThreshold);
-        return true;
-    }
-
-    public synchronized char[][] classifyBoard(Bitmap bmp, BoardDetector.Board board) {
-        if (!trained) return null;
-        SquareSampler.Sample[] samples = sampleAll(bmp, board);
-        if (samples == null) return null;
-
-        char[][] grid = new char[8][8];
-        for (int r = 0; r < 8; r++) {
-            for (int f = 0; f < 8; f++) {
-                int idx = r * 8 + f;
-                if (previousFrame != null && previousLabels != null) {
-                    float fd = SquareSampler.lumDistance(
-                            samples[idx].feature, previousFrame[idx].feature);
-                    if (fd < frameChangeThreshold) {
-                        grid[r][f] = previousLabels[idx];
-                        continue;
-                    }
-                }
-                grid[r][f] = classifyOne(samples[idx], r, f);
-            }
-        }
-        return grid;
-    }
-
-    public synchronized void commitConfirmed(char[][] grid, Bitmap bmp, BoardDetector.Board board) {
-        if (!trained || grid == null) return;
-        SquareSampler.Sample[] samples = sampleAll(bmp, board);
-        if (samples == null) return;
-        previousFrame = samples;
-        if (previousLabels == null) previousLabels = new char[64];
-        for (int r = 0; r < 8; r++) {
-            for (int f = 0; f < 8; f++) {
-                previousLabels[r * 8 + f] = grid[r][f] == 0 ? '.' : grid[r][f];
-            }
+        environment = OrtEnvironment.getEnvironment();
+        try (OrtSession.SessionOptions options = new OrtSession.SessionOptions()) {
+            options.setIntraOpNumThreads(2);
+            options.setInterOpNumThreads(1);
+            session = environment.createSession(bytes, options);
         }
     }
 
-    private SquareSampler.Sample[] sampleAll(Bitmap bmp, BoardDetector.Board board) {
-        if (board.square < 8) return null;
-        int rad = Math.max(4, (int) (board.square * 0.32f));
-        SquareSampler.Sample[] samples = new SquareSampler.Sample[64];
-        for (int r = 0; r < 8; r++) {
-            for (int f = 0; f < 8; f++) {
-                int cx = Math.round(board.left + (f + 0.5f) * board.square);
-                int cy = Math.round(board.top  + (r + 0.5f) * board.square);
-                samples[r * 8 + f] = SquareSampler.sample(bmp, cx, cy, rad);
+    public static final class Result {
+        public final char[][] grid;
+        public final float confidence;
+        Result(char[][] grid, float confidence) { this.grid = grid; this.confidence = confidence; }
+    }
+
+    /** Returns screen-order rows; perspective is applied by FenBuilder/BoardMapping. */
+    public char[][] classifyBoard(Bitmap bitmap, BoardDetector.Board board) throws OrtException {
+        Result result = readBoard(bitmap, board);
+        return result == null ? null : result.grid;
+    }
+
+    public Result readBoard(Bitmap bitmap, BoardDetector.Board board) throws OrtException {
+        float[] tiles = extractTiles(bitmap, board);
+        if (tiles == null) return null;
+        try (OnnxTensor input = OnnxTensor.createTensor(environment,
+                     FloatBuffer.wrap(tiles), new long[]{64, 1024});
+             OrtSession.Result output = session.run(Collections.singletonMap("tiles", input))) {
+            float[][] probabilities = (float[][]) output.get(0).getValue();
+            char[][] grid = new char[8][8];
+            float minimum = 1, total = 0;
+            for (int i = 0; i < 64; i++) {
+                int best = 0;
+                for (int j = 1; j < LABELS.length; j++)
+                    if (probabilities[i][j] > probabilities[i][best]) best = j;
+                if (!Float.isFinite(probabilities[i][best]) || probabilities[i][best] < MIN_CONFIDENCE)
+                    return null;
+                minimum = Math.min(minimum, probabilities[i][best]);
+                total += probabilities[i][best];
+                grid[7 - i / 8][i % 8] = LABELS[best];
+            }
+            return new Result(grid, (minimum + total / 64) / 2);
+        }
+    }
+
+    // Model preprocessing: Rec.601 grayscale; half-pixel bilinear 256x256 resize;
+    // upright 32x32 tiles, bottom row first. See the bundled upstream notice/license.
+    static float[] extractTiles(Bitmap bitmap, BoardDetector.Board board) {
+        if (bitmap == null || board == null || board.side < 64 || board.left < 0 || board.top < 0
+                || (long) board.left + board.side > bitmap.getWidth()
+                || (long) board.top + board.side > bitmap.getHeight()) return null;
+        int width = bitmap.getWidth(), height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        float[] result = new float[64 * 1024];
+        for (int y = 0; y < 256; y++) {
+            double sy = board.top + (y + 0.5) * board.side / 256 - 0.5;
+            int fy = (int) Math.floor(sy);
+            double wy = sy - fy;
+            for (int x = 0; x < 256; x++) {
+                double sx = board.left + (x + 0.5) * board.side / 256 - 0.5;
+                int fx = (int) Math.floor(sx);
+                double wx = sx - fx;
+                double value = gray(pixels, width, height, fx, fy) * (1-wx) * (1-wy)
+                        + gray(pixels, width, height, fx+1, fy) * wx * (1-wy)
+                        + gray(pixels, width, height, fx, fy+1) * (1-wx) * wy
+                        + gray(pixels, width, height, fx+1, fy+1) * wx * wy;
+                int tile = (7 - y / 32) * 8 + x / 32;
+                result[tile * 1024 + (y % 32) * 32 + x % 32] = (float) (value / 255);
             }
         }
-        return samples;
+        return result;
     }
 
-    private char[] flipLabels(char[] src) {
-        char[] o = new char[64];
-        for (int r = 0; r < 8; r++)
-            for (int f = 0; f < 8; f++)
-                o[r * 8 + f] = src[(7 - r) * 8 + (7 - f)];
-        return o;
+    private static double gray(int[] pixels, int width, int height, int x, int y) {
+        int color = pixels[Math.max(0, Math.min(height-1, y)) * width + Math.max(0, Math.min(width-1, x))];
+        return .299 * ((color >> 16) & 255) + .587 * ((color >> 8) & 255) + .114 * (color & 255);
     }
 
-    private char classifyOne(SquareSampler.Sample s, int r, int f) {
-        if (s.edgeEnergy < pieceColorThreshold) return '.';
-
-        float distWhite = Math.abs(s.contrastLum - whitePieceLumAvg);
-        float distBlack = Math.abs(s.contrastLum - blackPieceLumAvg);
-        boolean isWhitePiece = distWhite < distBlack;
-
-        float best = Float.MAX_VALUE;
-        char bestC = isWhitePiece ? 'P' : 'p';
-        for (int i = 0; i < templates.length; i++) {
-            char tc = labels[i];
-            if (tc == '.') continue;
-            if (Character.isUpperCase(tc) != isWhitePiece) continue;
-            // Background-subtracted silhouettes can match either square colour. In particular,
-            // a king or queen has only one starting template but can move to either colour.
-            float d = SquareSampler.shapeDistance(s.feature, templates[i].feature);
-            if (d < best) { best = d; bestC = tc; }
-        }
-        return bestC;
-    }
-
-    public synchronized void reset() {
-        templates = null;
-        labels = null;
-        previousFrame = null;
-        previousLabels = null;
-        trained = false;
-        bootstrapSide = null;
-    }
+    @Override public void close() throws OrtException { session.close(); }
 }

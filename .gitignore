@@ -9,3 +9,7 @@ captures/
 .cxx/
 app/src/main/jniLibs/*/libstockfish.so
 sf-cache/
+
+app/src/main/assets/piece-model/*.onnx
+app/src/test/resources/piece-model/
+app/src/main/assets/piece-model/ThirdPartyNotices-onnxruntime.txt

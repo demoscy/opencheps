@@ -36,9 +36,6 @@ public class ScreenCaptureServiceTest {
 
     @Before public void setup() {
         service = Robolectric.buildService(ScreenCaptureService.class).create().get();
-        PieceClassifier classifier = new PieceClassifier();
-        ReflectionHelpers.setField(classifier, "bootstrapSide", Side.WHITE);
-        ReflectionHelpers.setField(service, "classifier", classifier);
         ReflectionHelpers.setField(service, "capToScreenX", 3f);
         ReflectionHelpers.setField(service, "capToScreenY", 3f);
         ReflectionHelpers.setField(service, "currentPvs", new ArrayList<>(Collections.singletonList(
@@ -62,8 +59,7 @@ public class ScreenCaptureServiceTest {
     }
 
     @Test public void blackPerspectiveMapsActualEngineArrows() {
-        PieceClassifier classifier = ReflectionHelpers.getField(service, "classifier");
-        ReflectionHelpers.setField(classifier, "bootstrapSide", Side.BLACK);
+        ReflectionHelpers.setField(service, "boardSide", Side.BLACK);
         ArrowOverlayView.Arrow arrow = rebuild(new BoardDetector.Board(10, 100, 320, 1)).get(0);
         assertEquals(30 + 3.5f * 120, arrow.sx, 0.001);
         assertEquals(300 + 1.5f * 120, arrow.sy, 0.001);
@@ -115,7 +111,7 @@ public class ScreenCaptureServiceTest {
     @Test public void engineFailureDoesNotSuppressTheNextAttemptForTheSamePosition() {
         int[] queries = {0};
         StockfishEngine failing = new StockfishEngine() {
-            @Override public synchronized List<Pv> topMoves(String fen, int time, int count) throws Exception {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count) throws Exception {
                 queries[0]++;
                 throw new java.io.IOException("test failure");
             }
@@ -168,7 +164,7 @@ public class ScreenCaptureServiceTest {
     @Test public void analysisResumesAfterOpeningAndMultipleComputerReplies() {
         List<String> queries = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> topMoves(String fen, int time, int count) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("g1f3", 20, false));
             }
@@ -203,7 +199,7 @@ public class ScreenCaptureServiceTest {
     @Test public void fastComputerReplyIsAcceptedWithoutKeepingOldArrows() {
         int[] queries = {0};
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> topMoves(String fen, int time, int count) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
                 queries[0]++;
                 return Collections.singletonList(new Pv("g1f3", 20, false));
             }
@@ -243,6 +239,164 @@ public class ScreenCaptureServiceTest {
         ReflectionHelpers.setField(service, "confirmedGrid", grid);
         ReflectionHelpers.callInstanceMethod(service, "resetForCaptureGeometry", from(boolean.class, true));
         assertNull(ReflectionHelpers.getField(service, "confirmedGrid"));
+    }
+
+    @Test public void adoptsAnExistingPuzzleAfterTwoFramesWithoutAnOpeningPosition() {
+        List<String> queries = new ArrayList<>();
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
+                queries.add(fen);
+                return Collections.singletonList(new Pv("c7g7", 0, false));
+            }
+        });
+        char[][] puzzle = { "......k.".toCharArray(), "..Q.....".toCharArray(),
+                "........".toCharArray(), "........".toCharArray(), "........".toCharArray(),
+                "..q.....".toCharArray(), "........".toCharArray(), "......K.".toCharArray() };
+        recognizeTwice(puzzle, null);
+        assertEquals(1, queries.size());
+        assertEquals("6k1/2Q5/8/8/8/2q5/8/6K1 w - - 0 1", queries.get(0));
+        assertSame(puzzle, ReflectionHelpers.getField(service, "confirmedGrid"));
+    }
+
+    @Test public void arbitraryPuzzleJumpClearsOldMovesWithoutInventingTurn() {
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
+        ReflectionHelpers.setField(service, "lastEngineFen", "old position");
+        char[][] puzzle = { "......k.".toCharArray(), "..Q.....".toCharArray(),
+                "........".toCharArray(), "........".toCharArray(), "........".toCharArray(),
+                "..q.....".toCharArray(), "........".toCharArray(), "......K.".toCharArray() };
+        recognizeTwice(puzzle, null);
+        assertSame(initial, ReflectionHelpers.getField(service, "confirmedGrid"));
+        assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "observedStm"));
+        assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+        List<?> arrows = ReflectionHelpers.getField(service, "currentArrows");
+        assertTrue(arrows.isEmpty());
+    }
+
+    @Test public void onlySavedCompatibleAndRecognizableManualLayoutCanBeSelected() throws Exception {
+        byte[] data;
+        try (java.io.InputStream in = getClass().getResourceAsStream("/piece-model/chesscom-italian-white.png")) {
+            assertNotNull(in);
+            data = in.readAllBytes();
+        }
+        Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(data, 0, data.length);
+        com.opencheps.util.BoardArea correct = com.opencheps.util.BoardArea.fromPixels(222, 66, 768, 1440, 900, 0);
+        com.opencheps.util.BoardArea slightlyOffset = com.opencheps.util.BoardArea.fromPixels(222, 68, 768, 1440, 900, 0);
+        com.opencheps.util.BoardArea wrongLayout = com.opencheps.util.BoardArea.fromPixels(20, 20, 500, 1440, 900, 0);
+        com.opencheps.util.BoardArea wrongRotation = com.opencheps.util.BoardArea.fromPixels(222, 66, 768, 1440, 900, 2);
+        ReflectionHelpers.setField(service, "screenW", 1440);
+        ReflectionHelpers.setField(service, "screenH", 900);
+        ReflectionHelpers.setField(service, "captureW", 1440);
+        ReflectionHelpers.setField(service, "captureH", 900);
+        ReflectionHelpers.setField(service, "captureViewport",
+                com.opencheps.util.CaptureViewport.resolve(1440, 900, 1440, 900, 0, 0, 0, 0));
+        ReflectionHelpers.setField(service, "manualAreas", java.util.Arrays.asList(slightlyOffset, wrongRotation, wrongLayout, correct));
+        ReflectionHelpers.setField(service, "manualArea", slightlyOffset);
+        try (PieceClassifier classifier = new PieceClassifier(service)) {
+            ReflectionHelpers.setField(service, "classifier", classifier);
+            Object recognition = ReflectionHelpers.callInstanceMethod(service, "recognizeBoard", from(Bitmap.class, bitmap));
+            assertNotNull(recognition);
+            assertSame(correct, ReflectionHelpers.getField(recognition, "area"));
+            BoardDetector.Board bounds = ReflectionHelpers.getField(recognition, "board");
+            assertEquals(222, bounds.left);
+            assertEquals(66, bounds.top);
+            assertEquals(768, bounds.side);
+            // Manual mode must not fall back to the detector when none of its crops fit.
+            ReflectionHelpers.setField(service, "manualAreas", java.util.Arrays.asList(wrongRotation, wrongLayout));
+            ReflectionHelpers.setField(service, "manualArea", wrongRotation);
+            assertNull(ReflectionHelpers.callInstanceMethod(service, "recognizeBoard", from(Bitmap.class, bitmap)));
+        } finally { bitmap.recycle(); }
+    }
+
+    @Test public void stationaryPositionUsesProbesButConfirmationAndEngineRetryNeedCleanReads() {
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        ReflectionHelpers.setField(service, "cleanReference", new int[1]);
+        ReflectionHelpers.setField(service, "lastCleanRead", 1000L);
+        ReflectionHelpers.setField(service, "lastEngineFen", "ready");
+        assertFalse(ReflectionHelpers.callInstanceMethod(service, "needsCleanRead", from(long.class, 1500L)));
+        ReflectionHelpers.setField(service, "candidateGrid", initial);
+        ReflectionHelpers.setField(service, "candidateRepeats", 1);
+        assertTrue(ReflectionHelpers.callInstanceMethod(service, "needsCleanRead", from(long.class, 1500L)));
+        ReflectionHelpers.setField(service, "candidateGrid", null);
+        ReflectionHelpers.setField(service, "lastEngineFen", "");
+        assertTrue(ReflectionHelpers.callInstanceMethod(service, "needsCleanRead", from(long.class, 1500L)));
+        ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
+        assertFalse(ReflectionHelpers.callInstanceMethod(service, "needsCleanRead", from(long.class, 1500L)));
+        assertTrue(ReflectionHelpers.callInstanceMethod(service, "needsCleanRead", from(long.class, 17000L)));
+    }
+
+    @Test public void currentPuzzleUsesExplicitBlackTurnIndependentlyOfWhiteBoardOrientation() {
+        List<String> queries = new ArrayList<>();
+        ReflectionHelpers.setField(service, "userSide", Side.BLACK);
+        ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
+        ReflectionHelpers.setField(service, "turnExplicit", true);
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
+                queries.add(fen);
+                return Collections.singletonList(new Pv("c3g3", 0, false));
+            }
+        });
+        char[][] puzzle = { "......k.".toCharArray(), "..Q.....".toCharArray(),
+                "........".toCharArray(), "........".toCharArray(), "........".toCharArray(),
+                "..q.....".toCharArray(), "........".toCharArray(), "......K.".toCharArray() };
+        recognizeTwice(puzzle, null);
+        assertEquals(1, queries.size());
+        assertEquals("6k1/2Q5/8/8/8/2q5/8/6K1 b - - 0 1", queries.get(0));
+    }
+
+    @Test public void legacyThreeArrowSettingCannotDrawExtraCandidates() {
+        com.opencheps.util.Prefs.get(service).edit().putInt("multipv", 3).commit();
+        ReflectionHelpers.setField(service, "currentPvs", java.util.Arrays.asList(
+                new StockfishEngine.Pv("e2e4", 20, false), new StockfishEngine.Pv("d2d4", 10, false),
+                new StockfishEngine.Pv("g1f3", 5, false)));
+        assertEquals(1, rebuild(new BoardDetector.Board(10, 100, 320, 1)).size());
+    }
+    @Test public void practiceStrengthChangeRequeriesTheSamePositionAndRetainsOnlyOneRecommendation() {
+        List<Integer> strengths = new ArrayList<>();
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo) {
+                strengths.add(elo);
+                return java.util.Arrays.asList(new Pv("e2e4", 20, false), new Pv("d2d4", 10, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        com.opencheps.util.Prefs.setLimitStrength(service, false);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender",
+                from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, null));
+        com.opencheps.util.Prefs.setPracticeElo(service, 1700);
+        com.opencheps.util.Prefs.setLimitStrength(service, true);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender",
+                from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, null));
+        assertEquals(java.util.Arrays.asList(0, 1700), strengths);
+        List<?> pvs = ReflectionHelpers.getField(service, "currentPvs");
+        assertEquals(1, pvs.size());
+    }
+
+    @Test public void changingPracticeStrengthDuringSearchDiscardsTheOldResultAndAllowsRetry() {
+        com.opencheps.util.Prefs.setLimitStrength(service, false);
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo) {
+                if (elo == 0) {
+                    com.opencheps.util.Prefs.setPracticeElo(service, 1700);
+                    com.opencheps.util.Prefs.setLimitStrength(service, true);
+                }
+                return Collections.singletonList(new Pv("e2e4", 20, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        BoardDetector.Board board = new BoardDetector.Board(0, 0, 320, 1);
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        assertEquals("", ReflectionHelpers.getField(service, "lastEngineFen"));
+        List<?> old = ReflectionHelpers.getField(service, "currentPvs");
+        assertTrue(old.isEmpty());
+        ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender", from(BoardDetector.Board.class, board), from(Bitmap.class, null));
+        assertEquals(1700, (int) ReflectionHelpers.getField(service, "lastEngineStrength"));
+        List<?> fresh = ReflectionHelpers.getField(service, "currentPvs");
+        assertEquals(1, fresh.size());
     }
 
 }

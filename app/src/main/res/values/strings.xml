@@ -10,12 +10,28 @@
     <string name="notif_channel">OpenCheps Service</string>
     <string name="notif_title">OpenCheps is watching</string>
     <string name="notif_text">Tap Stop on the floating panel to end the session</string>
-    <string name="how_it_works">How auto-detection works</string>
-    <string name="how_it_works_body">1. Pick your colour above.\n2. Open chess app on STARTING position.\n3. Tap Start Watching, accept both prompts.\n4. App locates the board and learns piece templates.\n5. Arrows appear only on YOUR turn.\n6. If position glitches: tap recalibrate on the floating panel.</string>
+    <string name="how_it_works">How to analyze a position</string>
+    <string name="how_it_works_body">1. Pick the side you want to analyze.\n2. Open a puzzle or bot practice position using 2D pieces.\n3. Start Watching and grant overlay/screen sharing.\n4. Set board area to match the exact 8×8 board.\n5. Check Turn and White/Black below in the panel.\n6. The circular arrow reads the current position again. No starting setup is needed.</string>
     <string name="board_area_set">Set board area</string>
     <string name="board_area_help">Drag the square to move. Drag a corner to resize.
 Match the grid to the exact 8×8 board.</string>
     <string name="board_area_save">Save</string>
     <string name="board_area_auto">Auto</string>
     <string name="board_area_cancel">Cancel</string>
+    <string name="position_read">Read current position</string>
+    <string name="position_turn_white">Turn: White</string>
+    <string name="position_turn_black">Turn: Black</string>
+    <string name="position_bottom_white">White below ↕</string>
+    <string name="position_bottom_black">Black below ↕</string>
+    <string name="position_flip">Flip board orientation</string>
+    <string name="think_time">Think time: %1$d ms</string>
+    <string name="think_time_default">Think time: 1500 ms</string>
+    <string name="think_time_help">More time allows a deeper search. It does not set an Elo rating.</string>
+    <string name="limit_practice_strength">Limit practice strength</string>
+    <string name="practice_elo">Practice strength: %1$d Elo (approx.)</string>
+    <string name="practice_elo_default">Practice strength: 1800 Elo (approx.)</string>
+    <string name="practice_elo_help">Stockfish 18 supports 1320–3190 on its calibration scale, not your Chess.com rating. Lower strength varies its position-based choices; it does not simulate a human. Uncheck to use full strength.</string>
+    <string name="show_study_line">Show a 3-move study line</string>
+    <string name="study_line_help">One arrow always. The optional line shows up to three moves for each side. These are possible replies, not predictions, and the line may be shorter near game end.</string>
+    <string name="possible_line">Possible line:\n%1$s</string>
 </resources>

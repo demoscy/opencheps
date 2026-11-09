@@ -53,7 +53,7 @@
             android:layout_width="34dp"
             android:layout_height="34dp"
             android:layout_marginEnd="3dp"
-            android:contentDescription="Recalibrate"/>
+            android:contentDescription="@string/position_read"/>
 
         <ImageButton
             android:id="@+id/panelToggle"
@@ -117,6 +117,31 @@
             android:layout_height="wrap_content"/>
     </LinearLayout>
 
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <Button
+            android:id="@+id/panelTurn"
+            android:text="@string/position_turn_white"
+            android:textAllCaps="false"
+            android:textSize="11sp"
+            android:minHeight="48dp"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"/>
+        <Button
+            android:id="@+id/panelFlip"
+            android:text="@string/position_bottom_white"
+            android:contentDescription="@string/position_flip"
+            android:textAllCaps="false"
+            android:textSize="11sp"
+            android:minHeight="48dp"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
+
     <Button
         android:id="@+id/panelBoardArea"
         android:text="@string/board_area_set"
@@ -131,6 +156,18 @@
         android:textColor="#FFFFEB3B"
         android:textSize="12sp"
         android:fontFamily="monospace"
+        android:paddingTop="4dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/panelContinuation"
+        android:textColor="#FFB0BEC5"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:maxWidth="280dp"
+        android:maxLines="4"
+        android:ellipsize="end"
+        android:visibility="gone"
         android:paddingTop="4dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>

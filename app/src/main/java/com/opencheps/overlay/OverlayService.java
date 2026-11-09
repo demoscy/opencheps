@@ -4,6 +4,10 @@ import android.app.Service;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import com.opencheps.util.CaptureViewport;
 import android.os.Handler;
 import android.os.Build;
 import android.os.IBinder;
@@ -122,6 +126,31 @@ public class OverlayService extends Service {
         }
         return new Rect(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                 insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+    }
+
+    /** Main-thread snapshot of our own pixels for change probes; never used for recognition. */
+    public static int[] captureMask(int width, int height, CaptureViewport viewport) {
+        OverlayService service = instance;
+        if (service == null || viewport == null) return null;
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        try {
+            Canvas canvas = new Canvas(bitmap);
+            canvas.scale((float) width / viewport.width, (float) height / viewport.height);
+            canvas.translate(-viewport.left, -viewport.top);
+            int[] origin = new int[2];
+            service.arrows.getLocationOnScreen(origin);
+            canvas.save();
+            canvas.translate(origin[0], origin[1]);
+            service.arrows.draw(canvas);
+            canvas.restore();
+            Rect panelBounds = service.panel.boundsOnScreen();
+            Paint paint = new Paint();
+            paint.setColor(0xFF000000);
+            canvas.drawRect(panelBounds, paint);
+            int[] result = new int[width * height];
+            bitmap.getPixels(result, 0, width, 0, 0, width, height);
+            return result;
+        } finally { bitmap.recycle(); }
     }
 
     public static void cancelCalibration() {

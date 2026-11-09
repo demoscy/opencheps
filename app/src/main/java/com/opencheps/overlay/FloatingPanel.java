@@ -3,6 +3,8 @@ package com.opencheps.overlay;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.widget.Button;
 import android.os.Build;
 import android.os.Looper;
 import android.view.Gravity;
@@ -22,8 +24,10 @@ public class FloatingPanel {
     private final WindowManager wm;
     private View root;
     private WindowManager.LayoutParams lp;
-    private TextView statusTv, evalTv, sideWhiteTv, sideBlackTv;
+    private TextView statusTv, evalTv, sideWhiteTv, sideBlackTv, continuationTv;
     private ImageButton toggleBtn;
+    private Button turnBtn, flipBtn;
+    private Side turn = Side.WHITE;
     private boolean paused = false;
     private Side userSide = Side.WHITE;
     private int screenW, screenH;
@@ -34,6 +38,8 @@ public class FloatingPanel {
         void onRecalibrate();
         void onSetBoardArea();
         void onSideChange(Side newSide);
+        void onTurnChange(Side side);
+        void onFlipBoard();
     }
     private Listener listener;
 
@@ -50,9 +56,16 @@ public class FloatingPanel {
         root = LayoutInflater.from(ctx).inflate(R.layout.floating_panel, null);
         statusTv    = root.findViewById(R.id.panelStatus);
         evalTv      = root.findViewById(R.id.panelEval);
+        continuationTv = root.findViewById(R.id.panelContinuation);
         sideWhiteTv = root.findViewById(R.id.sideWhite);
         sideBlackTv = root.findViewById(R.id.sideBlack);
         toggleBtn   = root.findViewById(R.id.panelToggle);
+        turnBtn = root.findViewById(R.id.panelTurn);
+        flipBtn = root.findViewById(R.id.panelFlip);
+        turnBtn.setOnClickListener(v -> {
+            if (listener != null) listener.onTurnChange(turn == Side.WHITE ? Side.BLACK : Side.WHITE);
+        });
+        flipBtn.setOnClickListener(v -> { if (listener != null) listener.onFlipBoard(); });
         ImageButton stopBtn  = root.findViewById(R.id.panelStop);
         ImageButton recalBtn = root.findViewById(R.id.panelRecal);
 
@@ -166,6 +179,19 @@ public class FloatingPanel {
         });
     }
 
+    public void setPosition(Side sideToMove, Side bottom) {
+        turn = sideToMove;
+        if (turnBtn != null) turnBtn.setText(sideToMove == Side.WHITE ? R.string.position_turn_white : R.string.position_turn_black);
+        if (flipBtn != null) flipBtn.setText(bottom == Side.WHITE ? R.string.position_bottom_white : R.string.position_bottom_black);
+    }
+
+    public Rect boundsOnScreen() {
+        if (root == null) return new Rect();
+        int[] origin = new int[2];
+        root.getLocationOnScreen(origin);
+        return new Rect(origin[0], origin[1], origin[0] + root.getWidth(), origin[1] + root.getHeight());
+    }
+
     public void setVisible(boolean visible) {
         if (root != null) root.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
     }
@@ -180,8 +206,18 @@ public class FloatingPanel {
 
     public void setEval(String s) {
         if (evalTv == null) return;
-        if (Looper.myLooper() == Looper.getMainLooper()) evalTv.setText(s == null ? "" : s);
-        else evalTv.post(() -> evalTv.setText(s == null ? "" : s));
+        Runnable update = () -> {
+            evalTv.setText(s == null ? "" : s);
+            if (s == null || s.isEmpty()) setContinuation("");
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) update.run();
+        else evalTv.post(update);
+    }
+
+    public void setContinuation(String line) {
+        if (continuationTv == null) return;
+        continuationTv.setText(line.isEmpty() ? "" : ctx.getString(R.string.possible_line, line));
+        continuationTv.setVisibility(line.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     public void detach() {

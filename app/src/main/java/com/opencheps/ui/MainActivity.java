@@ -9,6 +9,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.SeekBar;
@@ -27,8 +28,8 @@ import com.opencheps.util.Prefs;
 public class MainActivity extends AppCompatActivity {
 
     private Button btnOverlay, btnStart, btnStop;
-    private TextView statusTv, thinkTv, multiPvTv;
-    private SeekBar thinkBar, multiPvBar;
+    private TextView statusTv, thinkTv, eloTv;
+    private SeekBar thinkBar, eloBar;
     private RadioGroup sideGroup;
     private RadioButton sideWhite, sideBlack;
     private MediaProjectionManager mpm;
@@ -63,24 +64,33 @@ public class MainActivity extends AppCompatActivity {
         btnStop    = findViewById(R.id.btnStop);
         statusTv   = findViewById(R.id.status);
         thinkTv    = findViewById(R.id.thinkLabel);
-        multiPvTv  = findViewById(R.id.multiPvLabel);
+        eloTv = findViewById(R.id.eloLabel);
         thinkBar   = findViewById(R.id.thinkBar);
-        multiPvBar = findViewById(R.id.multiPvBar);
+        eloBar = findViewById(R.id.eloBar);
         sideGroup  = findViewById(R.id.sideGroup);
         sideWhite  = findViewById(R.id.sideWhite);
         sideBlack  = findViewById(R.id.sideBlack);
 
         SharedPreferences sp = Prefs.get(this);
         int think = sp.getInt(Prefs.KEY_THINK_MS, 1500);
-        int pv    = sp.getInt(Prefs.KEY_MULTIPV, 3);
         String side = sp.getString(Prefs.KEY_USER_SIDE, "w");
 
         thinkBar.setMax(3000);
         thinkBar.setProgress(think);
-        multiPvBar.setMax(2);
-        multiPvBar.setProgress(pv - 1);
+        eloBar.setMax((Prefs.MAX_ELO - Prefs.MIN_ELO) / 10);
+        eloBar.setProgress((Prefs.practiceElo(this) - Prefs.MIN_ELO) / 10);
+        eloTv.setText(getString(R.string.practice_elo, Prefs.practiceElo(this)));
+        CheckBox limit = findViewById(R.id.limitStrength);
+        CheckBox line = findViewById(R.id.showStudyLine);
+        limit.setChecked(Prefs.limitStrength(this));
+        eloBar.setEnabled(limit.isChecked());
+        line.setChecked(Prefs.showStudyLine(this));
+        limit.setOnCheckedChangeListener((button, checked) -> {
+            Prefs.setLimitStrength(this, checked);
+            eloBar.setEnabled(checked);
+        });
+        line.setOnCheckedChangeListener((button, checked) -> Prefs.setShowStudyLine(this, checked));
         thinkTv.setText(thinkLabelText(think));
-        multiPvTv.setText("Arrows to show: " + pv);
         if ("b".equals(side)) sideBlack.setChecked(true); else sideWhite.setChecked(true);
 
         thinkBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -92,14 +102,14 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar b) {}
             @Override public void onStopTrackingTouch(SeekBar b) {}
         });
-        multiPvBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar b, int v, boolean u) {
-                int n = v + 1;
-                multiPvTv.setText("Arrows to show: " + n);
-                sp.edit().putInt(Prefs.KEY_MULTIPV, n).apply();
+        eloBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean user) {
+                int elo = Prefs.MIN_ELO + value * 10;
+                Prefs.setPracticeElo(MainActivity.this, elo);
+                eloTv.setText(getString(R.string.practice_elo, elo));
             }
-            @Override public void onStartTrackingTouch(SeekBar b) {}
-            @Override public void onStopTrackingTouch(SeekBar b) {}
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
         sideGroup.setOnCheckedChangeListener((g, id) -> {
             Prefs.setUserSide(this, id == R.id.sideBlack ? "b" : "w");
@@ -125,14 +135,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private String thinkLabelText(int ms) {
-        String strength;
-        if (ms < 500)       strength = "fast (≈2200 elo)";
-        else if (ms < 1000) strength = "balanced (≈2700 elo)";
-        else if (ms < 2000) strength = "strong (≈3000 elo)";
-        else                strength = "max (≈3300+ elo)";
-        return "Think time: " + ms + " ms — " + strength;
-    }
+    private String thinkLabelText(int ms) { return getString(R.string.think_time, ms); }
 
     @Override protected void onResume() {
         super.onResume();

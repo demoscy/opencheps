@@ -1,99 +1,102 @@
 package com.opencheps.vision;
 
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import com.opencheps.util.Side;
+import java.io.InputStream;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 34)
 public class PieceClassifierTest {
-    private final BoardDetector.Board board = new BoardDetector.Board(0, 0, 320, 1);
+    private PieceClassifier classifier;
+    @Before public void setup() throws Exception { classifier = new PieceClassifier(RuntimeEnvironment.getApplication()); }
+    @After public void close() throws Exception { classifier.close(); }
 
-    private char[][] start() {
-        String[] rows = {"rnbqkbnr", "pppppppp", "........", "........", "........", "........", "PPPPPPPP", "RNBQKBNR"};
-        char[][] grid = new char[8][];
-        for (int r = 0; r < 8; r++) grid[r] = rows[r].toCharArray();
-        return grid;
-    }
-
-    private Bitmap render(char[][] grid, int... highlighted) {
-        int[] pixels = new int[320 * 320];
-        for (int r = 0; r < 8; r++) for (int f = 0; f < 8; f++) {
-            boolean highlight = false;
-            for (int square : highlighted) if (square == r * 8 + f) highlight = true;
-            int background = highlight ? 0xFFCFCD64 : ((r + f) % 2 == 0 ? 0xFFE0D8B8 : 0xFF609060);
-            for (int y = 0; y < 40; y++) for (int x = 0; x < 40; x++) {
-                int dx = x - 20, dy = y - 20;
-                boolean ink = false;
-                switch (Character.toLowerCase(grid[r][f])) {
-                    case 'p': ink = (Math.abs(dx) <= 3 && Math.abs(dy) <= 8) || dx * dx + (dy + 5) * (dy + 5) <= 20; break;
-                    case 'n': ink = (dx >= -7 && dx <= -3 && Math.abs(dy) <= 8) || (dy >= 4 && dy <= 8 && Math.abs(dx) <= 7); break;
-                    case 'b': ink = Math.abs(dx - dy) <= 2 && Math.abs(dx) <= 8 && Math.abs(dy) <= 8; break;
-                    case 'r': ink = Math.abs(dx) <= 8 && Math.abs(dy) <= 8 && (Math.abs(dx) >= 5 || Math.abs(dy) >= 5); break;
-                    case 'q': ink = Math.abs(dx) <= 8 && (Math.abs(dy - 6) <= 2 || Math.abs(dy + 6) <= 2 || Math.abs(dx) <= 2 && Math.abs(dy) <= 8); break;
-                    case 'k': ink = Math.abs(dx) <= 8 && Math.abs(dy) <= 8 && (Math.abs(dx) <= 2 || Math.abs(dy) <= 2); break;
-                }
-                pixels[(r * 40 + y) * 320 + f * 40 + x] = ink ? (Character.isUpperCase(grid[r][f]) ? 0xFFF8F8F8 : 0xFF101010) : background;
-            }
+    private byte[] fixture(String name) throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/piece-model/" + name)) {
+            assertNotNull("Run python3 tools/prepare_piece_model.py --tests", in);
+            return in.readAllBytes();
         }
+    }
+    private Bitmap screenshot(String name) throws Exception {
+        byte[] data = fixture(name);
+        return BitmapFactory.decodeByteArray(data, 0, data.length);
+    }
+    private void assertPlacement(String expected, char[][] grid, Side bottom) {
+        assertNotNull(grid);
+        String fen = FenBuilder.build(grid, bottom, Side.WHITE);
+        assertNotNull(fen);
+        assertEquals(expected, fen.split(" ")[0]);
+    }
+
+    @Test public void realChessComMidgameNeedsNoOpeningSetup() throws Exception {
+        Bitmap bitmap = screenshot("chesscom-italian-white.png");
+        assertPlacement("r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R",
+                classifier.classifyBoard(bitmap, new BoardDetector.Board(222, 66, 768, 1)), Side.WHITE);
+        bitmap.recycle();
+    }
+
+    @Test public void realBlackPerspectiveKeepsPieceColorsAndFlipsOnlyCoordinates() throws Exception {
+        Bitmap bitmap = screenshot("lichess-italian-black.png");
+        assertPlacement("r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R",
+                classifier.classifyBoard(bitmap, new BoardDetector.Board(378, 65, 696, 1)), Side.BLACK);
+        bitmap.recycle();
+    }
+
+    @Test public void readsSparseCurrentPositionWithoutStartingPieces() throws Exception {
+        byte[] gray = fixture("example-gray.u8.bin");
+        int[] pixels = new int[gray.length];
+        for (int i = 0; i < pixels.length; i++) {
+            int v = gray[i] & 255;
+            pixels[i] = 0xFF000000 | (v<<16) | (v<<8) | v;
+        }
+        Bitmap bitmap = Bitmap.createBitmap(pixels, 606, 548, Bitmap.Config.ARGB_8888);
+        BoardDetector.Board board = new BoardDetector.Board(30, 14, 512, 1);
+        assertPlacement("bn4kN/p5bp/1p3npB/3p4/8/5Q2/PPP2PPP/R3R1K1",
+                classifier.classifyBoard(bitmap, board), Side.WHITE);
+        bitmap.recycle();
+    }
+
+    @Test public void preprocessingUsesBottomRowFirstAndHalfPixelBilinearSamples() {
+        int[] pixels = new int[256*256];
+        for (int y = 0; y < 256; y++) for (int x = 0; x < 256; x++) {
+            int v = (y/32)*8 + x/32;
+            pixels[y*256+x] = 0xFF000000 | (v<<16) | (v<<8) | v;
+        }
+        Bitmap bitmap = Bitmap.createBitmap(pixels, 256, 256, Bitmap.Config.ARGB_8888);
+        float[] tiles = PieceClassifier.extractTiles(bitmap, new BoardDetector.Board(0, 0, 256, 1));
+        for (int tile = 0; tile < 64; tile++) for (int i = 0; i < 1024; i++)
+            assertEquals(((7-tile/8)*8+tile%8)/255f, tiles[tile*1024+i], .000001f);
+        bitmap.recycle();
+        pixels = new int[512*512];
+        for (int i = 0; i < pixels.length; i++) pixels[i] = i%2 == 0 ? 0xFF000000 : 0xFFFFFFFF;
+        bitmap = Bitmap.createBitmap(pixels, 512, 512, Bitmap.Config.ARGB_8888);
+        tiles = PieceClassifier.extractTiles(bitmap, new BoardDetector.Board(0, 0, 512, 1));
+        for (float value : tiles) assertEquals(.5f, value, .000001f);
+        bitmap.recycle();
+    }
+
+    @Test public void unsupportedCartoonStyleIsRejectedForLowConfidence() throws Exception {
+        Bitmap bitmap = screenshot("lichess-italian-horsey.png");
+        assertNull(classifier.classifyBoard(bitmap, new BoardDetector.Board(378, 65, 696, 1)));
+        bitmap.recycle();
+    }
+
+    @Test public void invalidCropNeverClampsToAHiddenDifferentBoard() throws Exception {
         Bitmap bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
-        bitmap.setPixels(pixels, 0, 320, 0, 0, 320, 320);
-        return bitmap;
+        assertNull(classifier.classifyBoard(bitmap, new BoardDetector.Board(-1, 0, 320, 1)));
+        assertNull(classifier.classifyBoard(bitmap, new BoardDetector.Board(0, 1, 320, 1)));
+        assertNull(classifier.classifyBoard(bitmap, new BoardDetector.Board(0, 0, 56, 1)));
+        char[][] empty = classifier.classifyBoard(bitmap, new BoardDetector.Board(0, 0, 320, 1));
+        assertTrue(empty == null || !FenBuilder.validate(empty).ok);
+        bitmap.recycle();
     }
-
-    private void assertGrid(char[][] expected, char[][] actual) {
-        assertNotNull(actual);
-        for (int r = 0; r < 8; r++) assertArrayEquals("rank " + r, expected[r], actual[r]);
-    }
-
-    @Test public void recognizesOpeningAndComputerReplyWithLastMoveHighlights() {
-        PieceClassifier classifier = new PieceClassifier();
-        char[][] grid = start();
-        Bitmap initial = render(grid);
-        assertTrue(classifier.tryBootstrap(initial, board));
-        grid[6][4] = '.'; grid[4][4] = 'P';
-        Bitmap whiteMove = render(grid, 6 * 8 + 4, 4 * 8 + 4);
-        assertGrid(grid, classifier.classifyBoard(whiteMove, board));
-        classifier.commitConfirmed(grid, whiteMove, board);
-        grid[1][4] = '.'; grid[3][4] = 'p';
-        Bitmap blackReply = render(grid, 1 * 8 + 4, 3 * 8 + 4);
-        assertGrid(grid, classifier.classifyBoard(blackReply, board));
-        classifier.commitConfirmed(grid, blackReply, board);
-        grid[7][6] = '.'; grid[5][5] = 'N';
-        assertGrid(grid, classifier.classifyBoard(render(grid, 7 * 8 + 6, 5 * 8 + 5), board));
-    }
-
-    @Test public void kingCanMoveToOppositeSquareColourWithoutLosingItsIdentity() {
-        PieceClassifier classifier = new PieceClassifier();
-        char[][] grid = start();
-        assertTrue(classifier.tryBootstrap(render(grid), board));
-        grid[6][4] = '.'; grid[4][4] = 'P';
-        Bitmap pawnMove = render(grid);
-        classifier.commitConfirmed(grid, pawnMove, board);
-        grid[7][4] = '.'; grid[6][4] = 'K';
-        char[][] classified = classifier.classifyBoard(render(grid, 7 * 8 + 4, 6 * 8 + 4), board);
-        assertEquals('K', classified[6][4]);
-        assertEquals('.', classified[7][4]);
-    }
-
-    @Test public void flatBackgroundHighlightDoesNotChangePieceShapeFeatures() {
-        char[][] grid = start();
-        Bitmap plain = render(grid);
-        Bitmap highlight = render(grid, 6 * 8 + 4);
-        SquareSampler.Sample before = SquareSampler.sample(plain, 180, 260, 12);
-        SquareSampler.Sample after = SquareSampler.sample(highlight, 180, 260, 12);
-        // A change of square background must not change the normalized silhouette.
-        assertEquals(0, SquareSampler.shapeDistance(before.feature, after.feature), 0.0001);
-    }
-    @Test public void emptyBoardCannotBootstrapThirtyTwoImaginaryPieces() {
-        char[][] empty = start();
-        for (int r = 0; r < 8; r++) java.util.Arrays.fill(empty[r], '.');
-        PieceClassifier classifier = new PieceClassifier();
-        assertFalse(classifier.tryBootstrap(render(empty), board));
-        assertFalse(classifier.isTrained());
-    }
-
 }

@@ -84,4 +84,34 @@ public class OverlayServiceTest {
         assertEquals(View.VISIBLE, panelRoot.getVisibility());
     }
 
+    @Test @Config(sdk = 34)
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void changeProbeMaskUsesActualArrowPixelsAndCaptureViewportOrigin() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        ArrowOverlayView arrows = ReflectionHelpers.getField(controller.get(), "arrows");
+        arrows.layout(0, 0, 400, 800);
+        arrows.setArrows(java.util.Collections.singletonList(
+                new ArrowOverlayView.Arrow(100, 300, 300, 200, 0xFF00C853, 12, "e2e4")));
+        com.opencheps.util.CaptureViewport viewport = com.opencheps.util.CaptureViewport.resolve(
+                400, 800, 400, 760, 0, 40, 0, 0);
+        int[] mask = OverlayService.captureMask(200, 380, viewport);
+        assertNotNull(mask);
+        // Midpoint is physical (200,250): subtract top inset before downscaling.
+        assertTrue((mask[105*200+100] >>> 24) != 0);
+        assertEquals(0, mask[300*200+190]);
+    }
+
+    @Test public void clearingTheEvaluationAlsoClearsTheStudyContinuation() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        FloatingPanel panel = OverlayService.panel();
+        View root = ReflectionHelpers.getField(panel, "root");
+        View line = root.findViewById(com.opencheps.R.id.panelContinuation);
+        panel.setContinuation("W e2→e4   B e7→e5");
+        assertEquals(View.VISIBLE, line.getVisibility());
+        panel.setEval("");
+        assertEquals(View.GONE, line.getVisibility());
+    }
+
 }

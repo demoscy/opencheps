@@ -39,4 +39,52 @@ public class PrefsTest {
         Prefs.get(context).edit().putInt("manual_board_area_v1", 7).commit();
         assertNull(Prefs.boardArea(context));
     }
+    @Test public void puzzleAndBotLayoutsBothSurviveRestartAndAutoClearsBoth() {
+        BoardArea bot = BoardArea.fromPixels(20, 400, 1000, 1080, 2340, 0);
+        BoardArea puzzle = BoardArea.fromPixels(20, 620, 1000, 1080, 2340, 0);
+        Prefs.setBoardArea(context, bot);
+        Prefs.setBoardArea(context, puzzle);
+        Context fresh = context.createConfigurationContext(context.getResources().getConfiguration());
+        assertEquals(2, Prefs.boardAreas(fresh).size());
+        assertEquals(puzzle.encode(), Prefs.boardAreas(fresh).get(0).encode());
+        assertEquals(bot.encode(), Prefs.boardAreas(fresh).get(1).encode());
+        Prefs.setBoardArea(fresh, puzzle);
+        assertEquals(2, Prefs.boardAreas(context).size());
+        Prefs.setBoardArea(fresh, null);
+        assertTrue(Prefs.boardAreas(context).isEmpty());
+    }
+    @Test public void migratesOriginalSingleAreaAndBoundsListSize() {
+        BoardArea legacy = BoardArea.fromPixels(20, 400, 1000, 1080, 2340, 0);
+        Prefs.get(context).edit().putString("manual_board_area_v1", legacy.encode()).commit();
+        assertEquals(legacy.encode(), Prefs.boardAreas(context).get(0).encode());
+        for (int i = 0; i < 12; i++)
+            Prefs.setBoardArea(context, BoardArea.fromPixels(20, 500+i*50, 1000, 1080, 2340, 0));
+        assertEquals(8, Prefs.boardAreas(context).size());
+    }
+
+    @Test public void studySettingsPersistWithFullStrengthAsTheDefault() {
+        assertEquals(0, Prefs.strengthElo(context));
+        assertFalse(Prefs.showStudyLine(context));
+        Prefs.setPracticeElo(context, 1700);
+        Prefs.setLimitStrength(context, true);
+        Prefs.setShowStudyLine(context, true);
+        Context fresh = context.createConfigurationContext(context.getResources().getConfiguration());
+        assertEquals(1700, Prefs.strengthElo(fresh));
+        assertTrue(Prefs.showStudyLine(fresh));
+        Prefs.setLimitStrength(fresh, false);
+        assertEquals(0, Prefs.strengthElo(context));
+        assertEquals(1700, Prefs.practiceElo(context));
+    }
+    @Test public void strengthClampsToTheActualStockfish18RangeAndRejectsCorruptSettings() {
+        Prefs.setPracticeElo(context, 500);
+        assertEquals(1320, Prefs.practiceElo(context));
+        Prefs.setPracticeElo(context, 9000);
+        assertEquals(3190, Prefs.practiceElo(context));
+        Prefs.get(context).edit().putString("practice_elo", "bad").putString("limit_strength", "bad")
+                .putInt("show_study_line", 1).commit();
+        assertEquals(1800, Prefs.practiceElo(context));
+        assertEquals(0, Prefs.strengthElo(context));
+        assertFalse(Prefs.showStudyLine(context));
+    }
+
 }
