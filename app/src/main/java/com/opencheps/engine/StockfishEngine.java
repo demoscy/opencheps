@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 public class StockfishEngine {
     public static class Pv {
@@ -38,7 +39,7 @@ public class StockfishEngine {
     private BufferedWriter in;
     private BufferedReader out;
     private volatile boolean ready;
-    private int currentElo = -1;
+    private int currentElo = -1, currentMultiPv;
 
     public synchronized void start(Context ctx) throws Exception {
         if (ready) return;
@@ -57,7 +58,7 @@ public class StockfishEngine {
         send("setoption name Hash value 48");
         send("setoption name Move Overhead value 100");
         send("setoption name Ponder value false");
-        send("setoption name MultiPV value 1");
+        setMultiPv(1);
         setStrength(0);
         ready = true;
         Log.i(TAG, "Stockfish 18 ready: " + bin.getAbsolutePath());
@@ -74,9 +75,21 @@ public class StockfishEngine {
         currentElo = elo;
     }
 
-    /** One selected move, with its own possible continuation. Elo=0 retains full strength. */
+    private void setMultiPv(int choices) throws Exception {
+        if (choices == currentMultiPv) return;
+        send("setoption name MultiPV value " + choices);
+        currentMultiPv = choices;
+    }
+
     public synchronized List<Pv> analyze(String fen, int movetimeMs, int elo) throws Exception {
+        return analyze(fen, movetimeMs, elo, 1);
+    }
+
+    /** The actual selected move first, then distinct ranked alternatives when requested. */
+    public synchronized List<Pv> analyze(String fen, int movetimeMs, int elo, int requestedChoices) throws Exception {
         if (!ready) throw new IllegalStateException("engine not started");
+        int choices = Math.max(1, Math.min(3, requestedChoices));
+        setMultiPv(choices);
         setStrength(elo);
         int time = Math.max(300, Math.min(3000, movetimeMs));
         send("ucinewgame");
@@ -101,12 +114,22 @@ public class StockfishEngine {
             if (extended != null) selected = extended;
         }
         if (selected == null) selected = new Pv(Collections.singletonList(result.move), 0, false, false);
-        return Collections.singletonList(selected);
+        List<Pv> choicesFound = new ArrayList<>();
+        choicesFound.add(selected);
+        for (String move : result.ranking.values()) {
+            if (choicesFound.size() == choices) break;
+            boolean duplicate = false;
+            for (Pv candidate : choicesFound) if (candidate.uci.equals(move)) duplicate = true;
+            Pv alternative = result.lines.get(move);
+            if (!duplicate && alternative != null) choicesFound.add(alternative);
+        }
+        return choicesFound;
     }
 
     private static class Search {
         String move;
         final Map<String, Pv> lines = new HashMap<>();
+        final Map<Integer, String> ranking = new TreeMap<>();
     }
 
     private Search search(String fen, int time, String onlyMove) throws Exception {
@@ -125,6 +148,12 @@ public class StockfishEngine {
             }
             Pv pv = parsePv(line);
             if (pv != null) {
+                int rank = 1;
+                String[] words = line.split("\\s+");
+                for (int i = 0; i < words.length - 1; i++) if ("multipv".equals(words[i])) {
+                    try { rank = Integer.parseInt(words[i+1]); } catch (NumberFormatException e) { rank = 0; }
+                }
+                if (rank >= 1 && rank <= currentMultiPv) result.ranking.put(rank, pv.uci);
                 Pv previous = result.lines.get(pv.uci);
                 // Later bound/TT reports can shorten a valid variation. Keep a complete
                 // line for this same root move; retain its corresponding score as well.

@@ -10,6 +10,7 @@ public class Prefs {
     private static final String FILE = "opencheps";
     public  static final String KEY_USER_SIDE = "user_side";
     public  static final String KEY_THINK_MS  = "think_ms";
+    public static final String KEY_MULTIPV = "multipv";
     public static final int MIN_ELO = 1320, MAX_ELO = 3190, DEFAULT_ELO = 1800;
     private static final String KEY_LIMIT_STRENGTH = "limit_strength";
     private static final String KEY_PRACTICE_ELO = "practice_elo";
@@ -77,6 +78,13 @@ public class Prefs {
     }
 
     public static int thinkMs(Context c) { return get(c).getInt(KEY_THINK_MS, 1500); }
+    public static int multiPv(Context c) {
+        try { return Math.max(1, Math.min(3, get(c).getInt(KEY_MULTIPV, 3))); }
+        catch (ClassCastException e) { return 3; }
+    }
+    public static void setMultiPv(Context c, int choices) {
+        get(c).edit().putInt(KEY_MULTIPV, Math.max(1, Math.min(3, choices))).apply();
+    }
     public static int clampElo(int elo) { return Math.max(MIN_ELO, Math.min(MAX_ELO, elo)); }
     public static int practiceElo(Context c) {
         try { return clampElo(get(c).getInt(KEY_PRACTICE_ELO, DEFAULT_ELO)); }

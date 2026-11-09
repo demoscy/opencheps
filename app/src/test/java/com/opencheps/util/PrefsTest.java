@@ -87,4 +87,17 @@ public class PrefsTest {
         assertFalse(Prefs.showStudyLine(context));
     }
 
+    @Test public void choiceCountDefaultsToThreePersistsAndClampsCorruptValues() {
+        assertEquals(3, Prefs.multiPv(context));
+        Prefs.setMultiPv(context, 2);
+        Context fresh = context.createConfigurationContext(context.getResources().getConfiguration());
+        assertEquals(2, Prefs.multiPv(fresh));
+        Prefs.setMultiPv(fresh, 20);
+        assertEquals(3, Prefs.multiPv(context));
+        Prefs.setMultiPv(fresh, 0);
+        assertEquals(1, Prefs.multiPv(context));
+        Prefs.get(context).edit().putString("multipv", "bad").commit();
+        assertEquals(3, Prefs.multiPv(context));
+    }
+
 }

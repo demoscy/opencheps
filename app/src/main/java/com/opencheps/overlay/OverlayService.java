@@ -33,6 +33,8 @@ public class OverlayService extends Service {
     private ArrowOverlayView arrows;
     private FloatingPanel panel;
     private CalibrationOverlay calibration;
+    private BoardPreviewOverlay preview;
+    private Runnable previewClosed;
     private CalibrationListener calibrationListener;
     private boolean suspended;
     private boolean capturing;
@@ -68,7 +70,7 @@ public class OverlayService extends Service {
     public static void showCalibration(int width, int height, int rotation, Rect initial,
                                        CalibrationListener listener) {
         OverlayService s = instance;
-        if (s == null || !Settings.canDrawOverlays(s) || s.calibration != null) {
+        if (s == null || !Settings.canDrawOverlays(s) || s.calibration != null || s.preview != null) {
             listener.onFinished(false, null);
             return;
         }
@@ -84,6 +86,34 @@ public class OverlayService extends Service {
             Log.e(TAG, "addView calibration failed", e);
             s.finishCalibration(false, null);
         }
+    }
+
+    /** Takes ownership of a memory-only copy; the caller has detached capture first. */
+    public static void showBoardPreview(Bitmap bitmap, String details, Runnable closed) {
+        OverlayService service = instance;
+        if (service == null || !Settings.canDrawOverlays(service) || service.preview != null || service.calibration != null) {
+            if (bitmap != null) bitmap.recycle();
+            closed.run();
+            return;
+        }
+        service.previewClosed = closed;
+        service.preview = new BoardPreviewOverlay(service, bitmap, details, service::finishPreview);
+        try { service.wm.addView(service.preview, OverlayWindow.fullScreen(true)); }
+        catch (RuntimeException e) {
+            Log.e(TAG, "Could not show captured-board preview", e);
+            service.finishPreview();
+        }
+    }
+
+    private void finishPreview() {
+        if (preview != null) {
+            try { wm.removeViewImmediate(preview); } catch (RuntimeException ignored) {}
+            preview.releaseImage();
+            preview = null;
+        }
+        Runnable closed = previewClosed;
+        previewClosed = null;
+        if (closed != null) closed.run();
     }
 
     private void finishCalibration(boolean changed, BoardArea area) {
@@ -154,16 +184,21 @@ public class OverlayService extends Service {
     }
 
     public static void cancelCalibration() {
-        if (instance != null) instance.finishCalibration(false, null);
+        if (instance != null) {
+            instance.finishPreview();
+            instance.finishCalibration(false, null);
+        }
     }
 
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
+        finishPreview();
         finishCalibration(false, null);
     }
 
     @Override public void onDestroy() {
         instance = null;
+        finishPreview();
         finishCalibration(false, null);
         try { if (arrows != null) wm.removeView(arrows); } catch (Exception ignored) {}
         if (panel != null) panel.detach();

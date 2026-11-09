@@ -35,11 +35,16 @@ or Internet permission. Screenshots remain in memory and are never saved/uploade
 
 ## Practice strength and study line
 
-The overlay always shows one next-move arrow. In OpenCheps settings, optionally
-check **Limit practice strength**, then select 1320–3190 Elo on Stockfish 18's
+In OpenCheps settings, **Move choices** selects one to three candidate arrows,
+defaulting to three. Saved older choice counts are retained. Green is the selected
+move; amber and blue are distinct ranked alternatives. Fewer arrows appear if
+there are fewer legal choices or the search returns fewer candidates.
+
+Optionally check **Limit practice strength**, then select 1320–3190 Elo on Stockfish 18's
 approximate calibration scale. It is not a Chess.com rating or human model.
 Uncheck to restore full strength; the selected practice value is remembered.
 Think time no longer displays an invented Elo estimate.
+The cap applies to the green move; additional arrows are analysis alternatives.
 
 Enable **Show a 3-move study line** for up to three moves per side, alternating
 White/Black across six half-moves. It is one possible continuation, not a forecast.
@@ -54,9 +59,31 @@ concealment behavior is added.
 
 Phone checks: change the practice rating and return to the same position; verify
 its old recommendation clears/recalculates. Toggle back to full strength. Enable
-the line and check its first move equals the only arrow, White/Black alternate,
+the line and check its first move equals the green arrow, White/Black alternate,
 and the panel remains readable. Pause or move to an unclear board and confirm
 both old evaluation and continuation clear. Restart to check settings persist.
+Change Move choices between one and three on the same stationary position and
+verify the recommendation refreshes, distinct arrows appear, and the line still
+follows green. Relaunch to verify the choice count persists.
+
+## Check a rejected board
+
+If an exactly calibrated, stationary board is still rejected, tap **Check board**.
+This displays the last clean captured crop, its age, and the recognition reason.
+It does not take a fresh screenshot while open. Check that the crop contains the
+entire playable board with no clipped row, clock, border or OpenCheps controls.
+An uncertain-square message names the weakest square using the current board
+orientation, gives its confidence and counts squares below the 70% requirement.
+Other messages identify a missing/extra king, invalid layout or absent crop.
+These reports distinguish crop problems from piece recognition; they do not fix
+an unsupported theme or guarantee that a confident prediction is correct.
+
+For diagnosis, open a puzzle, bot board or completed position in the failing
+layout, let it settle, then check the preview and report its exact message and
+whether its crop matches. A screenshot of that preview can help reproduce the
+failure. Nothing is saved or sent by OpenCheps. Capture is detached before the
+preview appears; **Close board check** resumes only if normal Pause was off.
+Rotation, Stop and permission rejection close it safely.
 
 ## Why the old version failed
 
@@ -87,6 +114,7 @@ second display from a used MediaProjection grant.
 ## Capture and lifecycle
 
 Analysis is paused and the capture surface detached before the calibration editor
+or captured-board preview
 appears. Removal is followed by a compositor delay and fresh timestamp checks.
 Normal Pause remains in effect after Save, Auto or Cancel. Epoch checks suppress
 old results after editing, pause, side changes, rotation and capture visibility
@@ -135,12 +163,15 @@ Phone acceptance also requires checking:
 - Idle blinking reduction in both sharing modes; fresh reads after moving a
   piece along an arrow or moving the panel; no old arrows on an unclear board.
 - Save/Cancel/Auto while paused; cancellation retains turn and active crop.
+- Check board from both running and paused states; inspect the crop/reason, close
+  it, and verify pause/turn are preserved. Rotate or Stop while it is open and
+  confirm no preview window remains.
 - Rotation during/outside editing, resolution/font changes, Home/back transitions,
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-09: all 90 unit/Robolectric tests passed; both ARM debug APK
-splits built; lint completed with zero errors and 51 warnings. `git diff --check`
+Validation on 2026-11-09: all 103 unit/Robolectric tests passed; both ARM debug APK
+splits built; lint completed with zero errors and 53 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
 are desktop build/test evidence, not a physical-device acceptance result.
@@ -148,12 +179,17 @@ are desktop build/test evidence, not a physical-device acceptance result.
 The production Java UCI adapter was also run against the official SHA256-verified
 Stockfish 18 Linux AVX2 binary (release archive SHA256
 `536c0c2c0cf06450df0bfb5e876ef0d3119950703a8f143627f990c7b5417964`).
-It confirmed the actual 1320–3190 range, full/1320/1800/3190/full strength
+It confirmed one/two/three distinct choices, strength-limited primary preservation,
+the actual 1320–3190 range, full/1320/1800/3190/full strength
 transitions, six-half-move lines rooted in each selected move, and an empty
 result in checkmate. This verifies the host protocol, not ARM execution or
 an empirical Elo rating. Unit tests additionally cover handicap reapplication,
 truncated reports, selected-root preservation, settings changes during search,
-legacy multi-arrow preferences, promotion formatting and continuation clearing.
+saved one-to-three choice counts, promotion formatting and continuation clearing.
+Preview tests cover crop ownership, pause/turn preservation, rotation cancellation
+and permission rejection. Recognition diagnostics retain rejected predictions for
+inspection while keeping them excluded from engine input. The reported stationary
+Chess.com rejection remains unverified without the failing crop/device evidence.
 
 Physical MediaProjection composition, ARM inference/Stockfish, Chess.com animation
 and Pixel 10 Pro XL touch/inset behavior cannot be confirmed by desktop tests.

@@ -111,6 +111,19 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
+        SeekBar choices = findViewById(R.id.multiPvBar);
+        TextView choicesLabel = findViewById(R.id.multiPvLabel);
+        choices.setMax(2);
+        choices.setProgress(Prefs.multiPv(this) - 1);
+        choicesLabel.setText(getString(R.string.move_choices, Prefs.multiPv(this)));
+        choices.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean user) {
+                Prefs.setMultiPv(MainActivity.this, value + 1);
+                choicesLabel.setText(getString(R.string.move_choices, value + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
         sideGroup.setOnCheckedChangeListener((g, id) -> {
             Prefs.setUserSide(this, id == R.id.sideBlack ? "b" : "w");
         });

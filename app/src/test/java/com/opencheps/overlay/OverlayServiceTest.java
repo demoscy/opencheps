@@ -114,4 +114,31 @@ public class OverlayServiceTest {
         assertEquals(View.GONE, line.getVisibility());
     }
 
+    @Test public void boardPreviewClosesOnceOnRotationAndRestoresOverlayVisibility() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        int[] closed = {0};
+        OverlayService.suspendForCalibration();
+        OverlayService.showBoardPreview(android.graphics.Bitmap.createBitmap(64,64,android.graphics.Bitmap.Config.ARGB_8888),
+                "Uncertain e4 52%", () -> closed[0]++);
+        assertNotNull(ReflectionHelpers.getField(controller.get(), "preview"));
+        controller.get().onConfigurationChanged(new Configuration());
+        OverlayService.cancelCalibration();
+        assertEquals(1, closed[0]);
+        assertNull(ReflectionHelpers.getField(controller.get(), "preview"));
+        OverlayService.resumeAfterCalibration();
+        ArrowOverlayView arrows = ReflectionHelpers.getField(controller.get(), "arrows");
+        assertEquals(View.VISIBLE, arrows.getVisibility());
+    }
+    @Test public void rejectedPreviewReleasesUnattachedBitmapWithoutAnOrphanWindow() {
+        ShadowSettings.setCanDrawOverlays(false);
+        controller = Robolectric.buildService(OverlayService.class).create();
+        android.graphics.Bitmap image = android.graphics.Bitmap.createBitmap(64,64,android.graphics.Bitmap.Config.ARGB_8888);
+        int[] closed = {0};
+        OverlayService.showBoardPreview(image, "test", () -> closed[0]++);
+        assertEquals(1, closed[0]);
+        assertTrue(image.isRecycled());
+        assertNull(OverlayService.panel());
+    }
+
 }

@@ -37,6 +37,7 @@ public class FloatingPanel {
         void onStop();
         void onRecalibrate();
         void onSetBoardArea();
+        void onCheckBoard();
         void onSideChange(Side newSide);
         void onTurnChange(Side side);
         void onFlipBoard();
@@ -81,6 +82,9 @@ public class FloatingPanel {
         });
         recalBtn.setOnClickListener(v -> {
             if (listener != null) listener.onRecalibrate();
+        });
+        root.findViewById(R.id.panelCheckBoard).setOnClickListener(v -> {
+            if (listener != null) listener.onCheckBoard();
         });
         root.findViewById(R.id.panelBoardArea).setOnClickListener(v -> {
             if (listener != null) listener.onSetBoardArea();

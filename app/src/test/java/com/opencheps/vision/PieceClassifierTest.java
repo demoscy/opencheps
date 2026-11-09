@@ -90,6 +90,28 @@ public class PieceClassifierTest {
         bitmap.recycle();
     }
 
+    @Test public void rejectedThemeStillProvidesDiagnosticConfidenceWithoutBecomingAnalyzable() throws Exception {
+        Bitmap bitmap = screenshot("lichess-italian-horsey.png");
+        BoardDetector.Board board = new BoardDetector.Board(378, 65, 696, 1);
+        PieceClassifier.Result report = classifier.inspectBoard(bitmap, board);
+        assertNotNull(report);
+        assertFalse(report.isConfident());
+        assertTrue(report.uncertainSquares > 0);
+        assertTrue(report.minimumConfidence < .70f);
+        assertEquals(8, report.grid.length);
+        assertTrue(report.weakestSquare(Side.WHITE).matches("[a-h][1-8]"));
+        assertNull(classifier.readBoard(bitmap, board));
+        bitmap.recycle();
+    }
+    @Test public void diagnosticSquareNamesUseTheSameWhiteBlackMappingAsArrows() {
+        assertEquals("a8", PieceClassifier.squareName(0, Side.WHITE));
+        assertEquals("h1", PieceClassifier.squareName(63, Side.WHITE));
+        assertEquals("h1", PieceClassifier.squareName(0, Side.BLACK));
+        assertEquals("a8", PieceClassifier.squareName(63, Side.BLACK));
+        assertEquals("e4", PieceClassifier.squareName(36, Side.WHITE));
+        assertEquals("d5", PieceClassifier.squareName(36, Side.BLACK));
+    }
+
     @Test public void invalidCropNeverClampsToAHiddenDifferentBoard() throws Exception {
         Bitmap bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
         assertNull(classifier.classifyBoard(bitmap, new BoardDetector.Board(-1, 0, 320, 1)));

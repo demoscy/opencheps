@@ -111,4 +111,28 @@ public class StockfishEngineTest {
         assertNull(StockfishEngine.parsePv("info depth 15 score cp 20 pv e2e4 invalid"));
         assertNull(StockfishEngine.parsePv("info depth 15 score cp wrong pv e2e4"));
     }
+    @Test public void threeChoicesKeepActualHandicappedMoveFirstAndThenRankedAlternatives() throws Exception {
+        StockfishEngine engine = engine("readyok\nreadyok\n"
+                + "info depth 12 multipv 1 score cp 80 pv f2f3 g8f8 g1f1 f8e8 f3f4 e8d8\n"
+                + "info depth 12 multipv 2 score cp 40 pv g2g3 g8f8 g1f1 f8e8 f2f3 e8d8\n"
+                + "info depth 12 multipv 3 score cp 10 pv h2h3 g8f8 g1f1 f8e8 f2f3 e8d8\n"
+                + "bestmove h2h3\n");
+        List<StockfishEngine.Pv> result = engine.analyze(fen, 500, 1800, 3);
+        assertEquals(3, result.size());
+        assertEquals("h2h3", result.get(0).uci);
+        assertEquals("f2f3", result.get(1).uci);
+        assertEquals("g2g3", result.get(2).uci);
+        assertTrue(commands.toString().contains("MultiPV value 3"));
+    }
+    @Test public void duplicateReportsDoNotInventAdditionalChoices() throws Exception {
+        StockfishEngine engine = engine("readyok\nreadyok\n"
+                + "info multipv 1 score cp 20 pv f2f3 g8f8 g1f1 f8e8 f3f4 e8d8\n"
+                + "info multipv 2 score cp 20 pv f2f3 g8f8 g1f1 f8e8 f3f4 e8d8\n"
+                + "info multipv 3 score cp 10 pv g2g3 g8f8 g1f1 f8e8 f2f3 e8d8\n"
+                + "bestmove f2f3\n");
+        List<StockfishEngine.Pv> result = engine.analyze(fen, 500, 0, 99);
+        assertEquals(2, result.size());
+        assertTrue(commands.toString().contains("MultiPV value 3"));
+    }
+
 }

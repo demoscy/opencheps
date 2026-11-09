@@ -111,7 +111,7 @@ public class ScreenCaptureServiceTest {
     @Test public void engineFailureDoesNotSuppressTheNextAttemptForTheSamePosition() {
         int[] queries = {0};
         StockfishEngine failing = new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count) throws Exception {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) throws Exception {
                 queries[0]++;
                 throw new java.io.IOException("test failure");
             }
@@ -164,7 +164,7 @@ public class ScreenCaptureServiceTest {
     @Test public void analysisResumesAfterOpeningAndMultipleComputerReplies() {
         List<String> queries = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("g1f3", 20, false));
             }
@@ -199,7 +199,7 @@ public class ScreenCaptureServiceTest {
     @Test public void fastComputerReplyIsAcceptedWithoutKeepingOldArrows() {
         int[] queries = {0};
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
                 queries[0]++;
                 return Collections.singletonList(new Pv("g1f3", 20, false));
             }
@@ -244,7 +244,7 @@ public class ScreenCaptureServiceTest {
     @Test public void adoptsAnExistingPuzzleAfterTwoFramesWithoutAnOpeningPosition() {
         List<String> queries = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("c7g7", 0, false));
             }
@@ -333,7 +333,7 @@ public class ScreenCaptureServiceTest {
         ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
         ReflectionHelpers.setField(service, "turnExplicit", true);
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int count) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int count, int choices) {
                 queries.add(fen);
                 return Collections.singletonList(new Pv("c3g3", 0, false));
             }
@@ -346,17 +346,20 @@ public class ScreenCaptureServiceTest {
         assertEquals("6k1/2Q5/8/8/8/2q5/8/6K1 b - - 0 1", queries.get(0));
     }
 
-    @Test public void legacyThreeArrowSettingCannotDrawExtraCandidates() {
+    @Test public void savedThreeChoiceSettingReturnsThreeArrowsAndCanBeReducedToOne() {
         com.opencheps.util.Prefs.get(service).edit().putInt("multipv", 3).commit();
         ReflectionHelpers.setField(service, "currentPvs", java.util.Arrays.asList(
                 new StockfishEngine.Pv("e2e4", 20, false), new StockfishEngine.Pv("d2d4", 10, false),
                 new StockfishEngine.Pv("g1f3", 5, false)));
+        assertEquals(3, rebuild(new BoardDetector.Board(10, 100, 320, 1)).size());
+        com.opencheps.util.Prefs.setMultiPv(service, 1);
         assertEquals(1, rebuild(new BoardDetector.Board(10, 100, 320, 1)).size());
     }
     @Test public void practiceStrengthChangeRequeriesTheSamePositionAndRetainsOnlyOneRecommendation() {
+        com.opencheps.util.Prefs.setMultiPv(service, 1);
         List<Integer> strengths = new ArrayList<>();
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int elo) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices) {
                 strengths.add(elo);
                 return java.util.Arrays.asList(new Pv("e2e4", 20, false), new Pv("d2d4", 10, false));
             }
@@ -378,7 +381,7 @@ public class ScreenCaptureServiceTest {
     @Test public void changingPracticeStrengthDuringSearchDiscardsTheOldResultAndAllowsRetry() {
         com.opencheps.util.Prefs.setLimitStrength(service, false);
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
-            @Override public synchronized List<Pv> analyze(String fen, int time, int elo) {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices) {
                 if (elo == 0) {
                     com.opencheps.util.Prefs.setPracticeElo(service, 1700);
                     com.opencheps.util.Prefs.setLimitStrength(service, true);
@@ -397,6 +400,72 @@ public class ScreenCaptureServiceTest {
         assertEquals(1700, (int) ReflectionHelpers.getField(service, "lastEngineStrength"));
         List<?> fresh = ReflectionHelpers.getField(service, "currentPvs");
         assertEquals(1, fresh.size());
+    }
+
+    @Test public void changingChoiceCountReanalyzesAnUnchangedPosition() {
+        List<Integer> requested = new ArrayList<>();
+        ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices) {
+                requested.add(choices);
+                return java.util.Arrays.asList(new Pv("e2e4", 20, false), new Pv("d2d4", 10, false), new Pv("g1f3", 5, false));
+            }
+        });
+        char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
+        ReflectionHelpers.setField(service, "confirmedGrid", initial);
+        for (int choices : new int[]{1,3}) {
+            com.opencheps.util.Prefs.setMultiPv(service, choices);
+            ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender",
+                    from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, null));
+            List<?> arrows = ReflectionHelpers.getField(service, "currentArrows");
+            assertEquals(choices, arrows.size());
+        }
+        assertEquals(java.util.Arrays.asList(1,3), requested);
+    }
+
+    @Test public void cachedPreviewIsAnIndependentExactCropAndClearsOnGeometryChange() throws Exception {
+        Bitmap frame = Bitmap.createBitmap(80, 80, Bitmap.Config.ARGB_8888);
+        frame.eraseColor(android.graphics.Color.MAGENTA);
+        frame.setPixel(12, 14, android.graphics.Color.GREEN);
+        Class attemptClass = Class.forName("com.opencheps.capture.ScreenCaptureService$ReadAttempt");
+        Object attempt = ReflectionHelpers.callConstructor(attemptClass,
+                from(BoardDetector.Board.class, new BoardDetector.Board(10, 10, 64, 1)),
+                from(PieceClassifier.Result.class, null));
+        ReflectionHelpers.callInstanceMethod(service, "updateBoardPreview", from(Bitmap.class, frame), from(attemptClass, attempt));
+        Bitmap cached = ReflectionHelpers.getField(service, "lastBoardPreview");
+        frame.recycle();
+        assertFalse(cached.isRecycled());
+        assertEquals(android.graphics.Color.GREEN, cached.getPixel(2,4));
+        assertEquals(64, cached.getWidth());
+        ReflectionHelpers.callInstanceMethod(service, "resetForCaptureGeometry", from(boolean.class, false));
+        assertTrue(cached.isRecycled());
+        assertNull(ReflectionHelpers.getField(service, "lastBoardPreview"));
+    }
+
+    @Test public void previewPauseAndClosePreserveNormalPauseAndTurnState() {
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        org.robolectric.android.controller.ServiceController<com.opencheps.overlay.OverlayService> overlay =
+                Robolectric.buildService(com.opencheps.overlay.OverlayService.class).create();
+        try {
+            ReflectionHelpers.setField(service, "worker", new Handler(Looper.getMainLooper()));
+            ReflectionHelpers.callInstanceMethod(service, "wirePanel");
+            com.opencheps.overlay.FloatingPanel panel = com.opencheps.overlay.OverlayService.panel();
+            android.view.View root = ReflectionHelpers.getField(panel, "root");
+            root.findViewById(com.opencheps.R.id.panelToggle).performClick();
+            ShadowLooper.idleMainLooper();
+            ReflectionHelpers.setField(service, "observedStm", Side.BLACK);
+            ReflectionHelpers.callInstanceMethod(service, "beginBoardPreview");
+            ShadowLooper.idleMainLooper();
+            assertTrue(ReflectionHelpers.getField(service, "editing"));
+            assertNotNull(ReflectionHelpers.getField(overlay.get(), "preview"));
+            com.opencheps.overlay.OverlayService.cancelCalibration();
+            org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+            assertFalse(ReflectionHelpers.getField(service, "editing"));
+            assertTrue(ReflectionHelpers.getField(service, "paused"));
+            assertTrue(panel.isPaused());
+            assertEquals(Side.BLACK, ReflectionHelpers.getField(service, "observedStm"));
+        } finally {
+            overlay.destroy();
+        }
     }
 
 }

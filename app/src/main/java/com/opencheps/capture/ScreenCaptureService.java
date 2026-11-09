@@ -108,7 +108,12 @@ public class ScreenCaptureService extends Service {
     private int candidateRepeats;
     private Side observedStm = Side.WHITE;
     private String lastEngineFen = "";
-    private int lastEngineStrength;
+    private int lastEngineStrength, lastEngineChoices;
+    private Bitmap lastBoardPreview;
+    private String lastReadDetails = "Waiting for a captured board";
+    private long lastPreviewAt;
+    private boolean previewEditing;
+    private ReadAttempt lastReadAttempt;
     private String lastDisplayedArrowFen = "";
     private BoardDetector.Board lastKnownBoard;
     private List<StockfishEngine.Pv> currentPvs = new ArrayList<>();
@@ -175,6 +180,7 @@ public class ScreenCaptureService extends Service {
                 OverlayService.clearAll();
                 if (worker != null) worker.post(() -> {
                     invalidateAnalysis();
+                    if (!capturedContentVisible) clearBoardPreview("Shared app is hidden; waiting for a new frame");
                     candidateGrid = null;
                     candidateRepeats = 0;
                     drainReader();
@@ -246,6 +252,7 @@ public class ScreenCaptureService extends Service {
             }
             @Override public void onStop() { stopSelf(); }
             @Override public void onSetBoardArea() { beginCalibration(); }
+            @Override public void onCheckBoard() { beginBoardPreview(); }
             @Override public void onRecalibrate() {
                 epoch.incrementAndGet();
                 OverlayService.clearAll();
@@ -297,6 +304,76 @@ public class ScreenCaptureService extends Service {
         });
     }
 
+    private void beginBoardPreview() {
+        if (editing || stopping || worker == null) return;
+        editing = true;
+        previewEditing = true;
+        int expected = epoch.incrementAndGet();
+        OverlayService.suspendForCalibration();
+        worker.post(() -> {
+            if (stopping) return;
+            try {
+                if (virtualDisplay != null) virtualDisplay.setSurface(null);
+            } catch (RuntimeException e) {
+                // Never display the preview if its own pixels could enter capture.
+                Log.e(TAG, "Could not suspend capture for board check", e);
+                main.post(this::stopSelf);
+                return;
+            }
+            drainReader();
+            Bitmap copy = lastBoardPreview == null ? null : lastBoardPreview.copy(Bitmap.Config.ARGB_8888, false);
+            String details = lastReadDetails;
+            if (lastBoardPreview != null) details += "\nCaptured "
+                    + Math.max(0, (SystemClock.uptimeMillis() - lastPreviewAt) / 1000) + " s ago.";
+            String message = details;
+            main.post(() -> {
+                if (stopping || !editing || epoch.get() != expected) {
+                    if (copy != null) copy.recycle();
+                    if (!stopping && editing) finishCalibration(false, null);
+                    return;
+                }
+                OverlayService.showBoardPreview(copy, message, () -> finishCalibration(false, null));
+            });
+        });
+    }
+
+    private static final class ReadAttempt {
+        final BoardDetector.Board board;
+        final PieceClassifier.Result result;
+        ReadAttempt(BoardDetector.Board board, PieceClassifier.Result result) { this.board = board; this.result = result; }
+    }
+
+    private String readMessage(PieceClassifier.Result result) {
+        if (result == null) return "Crop too small · Check board";
+        if (!result.isConfident()) return "Uncertain " + result.weakestSquare(boardSide) + " "
+                + Math.round(result.minimumConfidence * 100) + "% · Check board";
+        FenBuilder.Validation validity = FenBuilder.validate(boardSide == Side.BLACK ? FenBuilder.flip(result.grid) : result.grid);
+        if (validity.ok) return "All 64 squares passed recognition";
+        if ("wK=0".equals(validity.reason)) return "White king not recognized";
+        if ("bK=0".equals(validity.reason)) return "Black king not recognized";
+        if (validity.reason.startsWith("wK=") || validity.reason.startsWith("bK=")) return "Extra king detected · Check board";
+        return "Piece layout invalid · " + validity.reason;
+    }
+
+    private void clearBoardPreview(String message) {
+        if (lastBoardPreview != null) lastBoardPreview.recycle();
+        lastBoardPreview = null;
+        lastReadDetails = message;
+    }
+
+    private void updateBoardPreview(Bitmap frame, ReadAttempt attempt) {
+        if (attempt == null) { clearBoardPreview(lastReadDetails); return; }
+        String message = readMessage(attempt.result);
+        if (attempt.result != null && !attempt.result.isConfident())
+            message += "\n" + attempt.result.uncertainSquares + " square(s) below the 70% confidence requirement.";
+        clearBoardPreview(message);
+        BoardDetector.Board board = attempt.board;
+        Bitmap crop = Bitmap.createBitmap(frame, board.left, board.top, board.side, board.side);
+        lastBoardPreview = crop.copy(Bitmap.Config.ARGB_8888, false);
+        if (crop != frame) crop.recycle();
+        lastPreviewAt = SystemClock.uptimeMillis();
+    }
+
     private void beginCalibration() {
         if (editing || stopping || worker == null) return;
         editing = true;
@@ -335,6 +412,8 @@ public class ScreenCaptureService extends Service {
     private void finishCalibration(boolean changed, BoardArea area) {
         if (stopping || !editing) return;
         if (changed) Prefs.setBoardArea(this, area);
+        boolean wasPreview = previewEditing;
+        previewEditing = false;
         epoch.incrementAndGet();
         // removeViewImmediate has run; allow the compositor to remove the editor before reattaching.
         main.postDelayed(() -> {
@@ -363,7 +442,7 @@ public class ScreenCaptureService extends Service {
                             panel.setEval("");
                             panel.setStatus(paused ? "Paused" : changed
                                     ? (area == null ? "Auto board detection" : "Manual board area saved")
-                                    : "Calibration cancelled");
+                                    : wasPreview ? "Board check closed" : "Calibration cancelled");
                         }
                     });
                 } catch (RuntimeException e) {
@@ -375,6 +454,7 @@ public class ScreenCaptureService extends Service {
     }
 
     private void resetGameState() {
+        clearBoardPreview("Waiting for a new captured board");
         confirmedGrid = null;
         candidateGrid = null;
         candidateRepeats = 0;
@@ -409,7 +489,8 @@ public class ScreenCaptureService extends Service {
                     panelStatus("Shared app layout unsupported · use full-screen app or entire screen");
                     drainReader();
                 } else if (SystemClock.uptimeMillis() >= nextCleanAllowed) {
-                    if (!lastEngineFen.isEmpty() && lastEngineStrength != Prefs.strengthElo(ScreenCaptureService.this))
+                    if (!lastEngineFen.isEmpty() && (lastEngineStrength != Prefs.strengthElo(ScreenCaptureService.this)
+                            || lastEngineChoices != Prefs.multiPv(ScreenCaptureService.this)))
                         invalidateAnalysis();
                     refreshStudyLine();
                     boolean appOnly = captureViewport.width != screenW || captureViewport.height != screenH;
@@ -613,11 +694,14 @@ public class ScreenCaptureService extends Service {
                 return;
             }
             Recognition recognition = recognizeBoard(bmp);
+            ReadAttempt attempt = recognition == null ? lastReadAttempt
+                    : new ReadAttempt(recognition.board, recognition.result);
+            updateBoardPreview(bmp, attempt);
             if (recognition == null) {
                 candidateGrid = null;
                 candidateRepeats = 0;
                 invalidateAnalysis();
-                panelStatus("Board unclear · Set board area / use 2D pieces");
+                panelStatus(attempt == null ? "No usable crop · Check board" : readMessage(attempt.result));
                 publish(OverlayService::clearAll);
                 cleanReference = null;
                 nextCleanAllowed = SystemClock.uptimeMillis() + 2000;
@@ -643,6 +727,7 @@ public class ScreenCaptureService extends Service {
             Log.w(TAG, "loop iter failed: " + e.getMessage(), e);
             invalidateAnalysis();
             panelStatus("Recognition unavailable · retrying");
+            clearBoardPreview("Recognition failed before the board could be checked");
             cleanReference = null;
         } finally {
             if (bmp != null && !bmp.isRecycled()) bmp.recycle();
@@ -656,16 +741,22 @@ public class ScreenCaptureService extends Service {
         final BoardDetector.Board board;
         final char[][] grid;
         final BoardArea area;
-        Recognition(BoardDetector.Board board, char[][] grid, BoardArea area) {
-            this.board = board; this.grid = grid; this.area = area;
+        final PieceClassifier.Result result;
+        Recognition(BoardDetector.Board board, PieceClassifier.Result result, BoardArea area) {
+            this.board = board; this.grid = result.grid; this.area = area; this.result = result;
         }
     }
 
     private Recognition recognizeBoard(Bitmap bitmap) throws Exception {
+        lastReadAttempt = null;
+        lastReadDetails = "No compatible saved area. Check rotation and select the board inside the shared app.";
         if (manualAreas.isEmpty()) {
             BoardDetector.Board board = BoardDetector.locate(bitmap);
-            char[][] grid = board == null ? null : classifier.classifyBoard(bitmap, board);
-            return grid != null && validGrid(grid) ? new Recognition(board, grid, null) : null;
+            PieceClassifier.Result result = board == null ? null : classifier.inspectBoard(bitmap, board);
+            if (board != null) lastReadAttempt = new ReadAttempt(board, result);
+            else lastReadDetails = "Automatic detection did not find a board. Use Set board area.";
+            return result != null && result.isConfident() && validGrid(result.grid)
+                    ? new Recognition(board, result, null) : null;
         }
         // Manual mode never substitutes an approximate automatic detector rectangle.
         List<BoardArea> candidates = new ArrayList<>(manualAreas);
@@ -678,10 +769,11 @@ public class ScreenCaptureService extends Service {
                     : captureViewport.crop(physical, captureW, captureH);
             if (pixels == null) continue;
             BoardDetector.Board board = new BoardDetector.Board(pixels.left, pixels.top, pixels.side, 1);
-            PieceClassifier.Result result = classifier.readBoard(bitmap, board);
+            PieceClassifier.Result result = classifier.inspectBoard(bitmap, board);
+            if (lastReadAttempt == null) lastReadAttempt = new ReadAttempt(board, result);
             // Prefer the active crop on near ties to avoid oscillating between close saves.
-            if (result != null && validGrid(result.grid) && result.confidence > bestConfidence + .01f) {
-                best = new Recognition(board, result.grid, area);
+            if (result != null && result.isConfident() && validGrid(result.grid) && result.confidence > bestConfidence + .01f) {
+                best = new Recognition(board, result, area);
                 bestConfidence = result.confidence;
             }
         }
@@ -808,7 +900,8 @@ public class ScreenCaptureService extends Service {
         String fen = FenBuilder.build(confirmedGrid, boardSide, userSide);
         if (fen == null) { panelStatus("FEN build failed"); return; }
         int strength = Prefs.strengthElo(getApplicationContext());
-        if (fen.equals(lastEngineFen) && strength == lastEngineStrength) {
+        int choices = Prefs.multiPv(getApplicationContext());
+        if (fen.equals(lastEngineFen) && strength == lastEngineStrength && choices == lastEngineChoices) {
             repushCurrentArrows(board);
             return;
         }
@@ -816,17 +909,18 @@ public class ScreenCaptureService extends Service {
         panelStatus("Thinking " + think + " ms…");
         try {
             long t0 = System.currentTimeMillis();
-            List<StockfishEngine.Pv> pvs = engine.analyze(fen, think, strength);
+            List<StockfishEngine.Pv> pvs = engine.analyze(fen, think, strength, choices);
             long dt = System.currentTimeMillis() - t0;
-            if (strength != Prefs.strengthElo(getApplicationContext())) {
+            if (strength != Prefs.strengthElo(getApplicationContext()) || choices != Prefs.multiPv(getApplicationContext())) {
                 invalidateAnalysis();
-                panelStatus("Practice strength changed · updating");
+                panelStatus("Analysis settings changed · updating");
                 return;
             }
             if (pvs.isEmpty()) { panelStatus("No legal move"); return; }
             lastEngineFen = fen;
             lastEngineStrength = strength;
-            currentPvs = new ArrayList<>(pvs.subList(0, 1));
+            lastEngineChoices = choices;
+            currentPvs = new ArrayList<>(pvs.subList(0, Math.min(choices, pvs.size())));
             currentArrows = buildArrows(currentPvs, board);
             lastDisplayedArrowFen = fen;
             List<ArrowOverlayView.Arrow> rendered = new ArrayList<>(currentArrows);
@@ -862,7 +956,9 @@ public class ScreenCaptureService extends Service {
         Side persp = boardSide;
         BoardMapping mapping = mappingFor(board);
         float cellAvg = (mapping.width + mapping.height) / 16;
-        for (int i = 0; i < Math.min(1, pvs.size()); i++) {
+        int[] colors = {0xFF00C853, 0xFFFFB300, 0xFF29B6F6};
+        float[] widths = {18f, 13f, 10f};
+        for (int i = 0; i < Math.min(Prefs.multiPv(this), pvs.size()); i++) {
             String uci = pvs.get(i).uci;
             if (uci == null || uci.length() < 4) continue;
             int fx = uci.charAt(0) - 'a', fy = 8 - (uci.charAt(1) - '0');
@@ -870,8 +966,8 @@ public class ScreenCaptureService extends Service {
             float[] from = mapping.squareCenter(fx, fy, persp == Side.BLACK);
             float[] to = mapping.squareCenter(tx, ty, persp == Side.BLACK);
             String lbl = (i == 0 ? "★ " : "") + uci;
-            float width = Math.max(8f, 18f * Math.min(1.5f, cellAvg / 60f));
-            out.add(new ArrowOverlayView.Arrow(from[0], from[1], to[0], to[1], 0xFF00C853, width, lbl));
+            float width = Math.max(8f, widths[i] * Math.min(1.5f, cellAvg / 60f));
+            out.add(new ArrowOverlayView.Arrow(from[0], from[1], to[0], to[1], colors[i], width, lbl));
         }
         return out;
     }
@@ -1002,6 +1098,7 @@ public class ScreenCaptureService extends Service {
 
     private void resetForCaptureGeometry(boolean physicalChange) {
         lastKnownBoard = null;
+        clearBoardPreview("Screen or capture layout changed; waiting for a new frame");
         cleanReference = null;
         nextCleanAllowed = 0;
         if (physicalChange) resetGameState();
@@ -1108,6 +1205,7 @@ public class ScreenCaptureService extends Service {
                 try { if (engine != null) engine.stop(); } catch (Exception ignored) {}
                 try { if (classifier != null) classifier.close(); } catch (Exception ignored) {}
                 cleanReference = null;
+                clearBoardPreview("Capture stopped");
                 try {
                     if (virtualDisplay != null) virtualDisplay.release();
                 } catch (RuntimeException e) { Log.w(TAG, "display cleanup", e); }

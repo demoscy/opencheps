@@ -142,13 +142,27 @@
             android:layout_height="wrap_content"/>
     </LinearLayout>
 
-    <Button
-        android:id="@+id/panelBoardArea"
-        android:text="@string/board_area_set"
-        android:textSize="12sp"
-        android:minHeight="48dp"
+    <LinearLayout
+        android:orientation="horizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"/>
+        android:layout_height="wrap_content">
+        <Button
+            android:id="@+id/panelBoardArea"
+            android:text="@string/board_area_set"
+            android:textSize="11sp"
+            android:minHeight="48dp"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"/>
+        <Button
+            android:id="@+id/panelCheckBoard"
+            android:text="@string/board_check"
+            android:textSize="11sp"
+            android:minHeight="48dp"
+            android:layout_weight="1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"/>
+    </LinearLayout>
 
     <TextView
         android:id="@+id/panelEval"

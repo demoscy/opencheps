@@ -24,6 +24,12 @@ public class MainActivityTest {
             SeekBar elo = activity.findViewById(R.id.eloBar);
             CheckBox limit = activity.findViewById(R.id.limitStrength);
             CheckBox line = activity.findViewById(R.id.showStudyLine);
+            SeekBar choices = activity.findViewById(R.id.multiPvBar);
+            assertEquals(2, choices.getProgress()); // Three choices by default.
+            choices.setProgress(0);
+            assertEquals(1, Prefs.multiPv(activity));
+            choices.setProgress(2);
+            assertEquals(3, Prefs.multiPv(activity));
             assertFalse(elo.isEnabled());
             limit.performClick();
             assertTrue(elo.isEnabled());

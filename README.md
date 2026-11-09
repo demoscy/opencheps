@@ -28,18 +28,21 @@ puzzle/history jump can require Read current position and Turn selection.
 
 ## Study controls
 
-The overlay always draws **one next-move arrow**. The old one-to-three candidate
-selector is removed; saved old arrow-count preferences are ignored.
+**Move choices** selects **one to three candidate arrows**, defaulting to three.
+Existing saved choice counts are honored. Green marks the selected move; amber
+and blue show distinct ranked alternatives when the position has enough moves.
 
 Enable **Limit practice strength** and choose **1320–3190 Elo** to use Stockfish
 18's native `UCI_LimitStrength` / `UCI_Elo`. Disable it for full strength. This is
 Stockfish's approximate calibration scale, not a Chess.com rating, and is not
 human imitation or a concealment feature. Think time only controls search time;
 its former device-dependent Elo estimates are removed. Settings persist locally.
+The cap applies to the green selected move; other arrows are analysis alternatives.
 
 **Show a 3-move study line** displays up to six half-moves (three for each side),
-with White/Black labels. It is one possible variation, not three competing arrows
-or a prediction of actual replies. It can be shorter near mate/game end or if the
+with White/Black labels, following the green arrow. This is separate from the
+number of candidate arrows and is not a prediction of actual replies. It can
+be shorter near mate/game end or if the
 search yields less. The strength cap applies to the selected next move; the rest
 is an illustrative engine variation, not independently Elo-limited play per ply.
 The line clears with the old evaluation on pause or uncertain/changed positions.
@@ -95,6 +98,14 @@ tracking supports ordinary moves, captures, castling changes and some quick
 computer replies; ambiguous jumps clear stale analysis and request a fresh read.
 Unsupported 3D/cartoon themes and animation can still fail.
 
+**Check board** opens a paused, memory-only preview of the last clean board crop,
+with its age and recognition result. It identifies the weakest square and its
+confidence, or a rejected king/pawn arrangement. Close it to resume; normal Pause
+remains in effect. The preview uses a separate bitmap and detaches capture before
+appearing, so its controls never become recognition input. It does not save images
+or relax acceptance checks. A matching calibration grid does not by itself prove
+that the captured crop, scaled pieces or theme will pass recognition.
+
 ## Stockfish 18
 
 Bundled as `app/src/main/jniLibs/<abi>/libstockfish.so`. The CI workflow downloads the official Stockfish 18 Android binaries from the `sf_18` release and SHA256-verifies them:
@@ -116,7 +127,8 @@ setoption name Move Overhead value 100
 
 Stockfish uses two threads and a 48 MB hash. The default search time is 1500 ms,
 configurable from 300 to 3000 ms, with at most another 500 ms to obtain the
-selected move's continuation. Elo limiting is a separate setting. Stockfish's
+selected move's continuation. MultiPV changes to the requested choice count for
+each analysis. Elo limiting is a separate setting. Stockfish's
 strength calibration cannot be converted directly into your online account rating.
 
 ## Build, tests and APKs

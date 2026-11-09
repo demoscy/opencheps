@@ -30,8 +30,16 @@ Match the grid to the exact 8×8 board.</string>
     <string name="limit_practice_strength">Limit practice strength</string>
     <string name="practice_elo">Practice strength: %1$d Elo (approx.)</string>
     <string name="practice_elo_default">Practice strength: 1800 Elo (approx.)</string>
-    <string name="practice_elo_help">Stockfish 18 supports 1320–3190 on its calibration scale, not your Chess.com rating. Lower strength varies its position-based choices; it does not simulate a human. Uncheck to use full strength.</string>
+    <string name="practice_elo_help">Stockfish 18 supports 1320–3190 on its calibration scale, not your Chess.com rating. Lower strength varies its position-based choices; it does not simulate a human. Uncheck to use full strength. The limit applies to the green choice; additional choices are ranked analysis alternatives.</string>
     <string name="show_study_line">Show a 3-move study line</string>
-    <string name="study_line_help">One arrow always. The optional line shows up to three moves for each side. These are possible replies, not predictions, and the line may be shorter near game end.</string>
-    <string name="possible_line">Possible line:\n%1$s</string>
+    <string name="study_line_help">Choose one to three candidate arrows. The optional line follows the green choice for up to three moves for each side. These are possible replies, not predictions, and the line may be shorter near game end.</string>
+    <string name="possible_line">Green continuation:\n%1$s</string>
+    <string name="move_choices">Move choices: %1$d</string>
+    <string name="move_choices_default">Move choices: 3</string>
+    <string name="move_choices_help">Number of candidate arrows, one to three</string>
+    <string name="board_check">Check board</string>
+    <string name="board_check_title">Captured board — analysis paused</string>
+    <string name="board_check_image">Last clean captured board crop</string>
+    <string name="board_check_help">This is the last captured crop, not a new live image. Check that it contains the complete playable board. An uncertain square means its piece or background was not recognized confidently. The image stays in memory and is not saved or uploaded.</string>
+    <string name="board_check_close">Close board check</string>
 </resources>

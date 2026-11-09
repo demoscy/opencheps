@@ -2,6 +2,7 @@ package com.opencheps.vision;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import com.opencheps.util.Side;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -40,8 +41,14 @@ public final class PieceClassifier implements AutoCloseable {
 
     public static final class Result {
         public final char[][] grid;
-        public final float confidence;
-        Result(char[][] grid, float confidence) { this.grid = grid; this.confidence = confidence; }
+        public final float confidence, minimumConfidence;
+        public final int uncertainSquares, weakestIndex;
+        Result(char[][] grid, float confidence, float minimumConfidence, int uncertainSquares, int weakestIndex) {
+            this.grid = grid; this.confidence = confidence; this.minimumConfidence = minimumConfidence;
+            this.uncertainSquares = uncertainSquares; this.weakestIndex = weakestIndex;
+        }
+        public boolean isConfident() { return uncertainSquares == 0; }
+        public String weakestSquare(Side bottom) { return squareName(weakestIndex, bottom); }
     }
 
     /** Returns screen-order rows; perspective is applied by FenBuilder/BoardMapping. */
@@ -51,6 +58,12 @@ public final class PieceClassifier implements AutoCloseable {
     }
 
     public Result readBoard(Bitmap bitmap, BoardDetector.Board board) throws OrtException {
+        Result result = inspectBoard(bitmap, board);
+        return result != null && result.isConfident() ? result : null;
+    }
+
+    /** Diagnostic predictions may be uncertain. Never use them for analysis without isConfident(). */
+    public Result inspectBoard(Bitmap bitmap, BoardDetector.Board board) throws OrtException {
         float[] tiles = extractTiles(bitmap, board);
         if (tiles == null) return null;
         try (OnnxTensor input = OnnxTensor.createTensor(environment,
@@ -59,18 +72,27 @@ public final class PieceClassifier implements AutoCloseable {
             float[][] probabilities = (float[][]) output.get(0).getValue();
             char[][] grid = new char[8][8];
             float minimum = 1, total = 0;
+            int uncertain = 0, weakest = 0;
             for (int i = 0; i < 64; i++) {
                 int best = 0;
                 for (int j = 1; j < LABELS.length; j++)
                     if (probabilities[i][j] > probabilities[i][best]) best = j;
-                if (!Float.isFinite(probabilities[i][best]) || probabilities[i][best] < MIN_CONFIDENCE)
-                    return null;
-                minimum = Math.min(minimum, probabilities[i][best]);
-                total += probabilities[i][best];
-                grid[7 - i / 8][i % 8] = LABELS[best];
+                float certainty = probabilities[i][best];
+                if (!Float.isFinite(certainty) || certainty < 0 || certainty > 1) certainty = 0;
+                if (certainty < MIN_CONFIDENCE) uncertain++;
+                int row = 7 - i / 8, file = i % 8;
+                if (certainty < minimum) { minimum = certainty; weakest = row * 8 + file; }
+                total += certainty;
+                grid[row][file] = LABELS[best];
             }
-            return new Result(grid, (minimum + total / 64) / 2);
+            return new Result(grid, (minimum + total / 64) / 2, minimum, uncertain, weakest);
         }
+    }
+
+    static String squareName(int screenIndex, Side bottom) {
+        int row = screenIndex / 8, file = screenIndex % 8;
+        if (bottom == Side.BLACK) { row = 7 - row; file = 7 - file; }
+        return "" + (char) ('a' + file) + (8 - row);
     }
 
     // Model preprocessing: Rec.601 grayscale; half-pixel bilinear 256x256 resize;
