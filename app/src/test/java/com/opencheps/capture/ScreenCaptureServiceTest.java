@@ -66,6 +66,30 @@ public class ScreenCaptureServiceTest {
         assertEquals(300 + 3.5f * 120, arrow.ey, 0.001);
     }
 
+    @Test public void arrowLabelsUseEachCandidatesOwnScoreAndRetainMateSignForEitherSide() {
+        com.opencheps.util.Prefs.setMultiPv(service, 3);
+        ReflectionHelpers.setField(service, "currentPvs", java.util.Arrays.asList(
+                new StockfishEngine.Pv("e2e4", 80, false), new StockfishEngine.Pv("d2d4", -125, false),
+                new StockfishEngine.Pv("g1f3", 99997, true)));
+        BoardDetector.Board board = new BoardDetector.Board(10, 100, 320, 1);
+        List<ArrowOverlayView.Arrow> arrows = rebuild(board);
+        assertEquals("★ +0.80", arrows.get(0).label);
+        assertEquals("-1.25", arrows.get(1).label);
+        assertEquals("M3", arrows.get(2).label);
+        ReflectionHelpers.setField(service, "boardSide", Side.BLACK);
+        assertEquals("★ +0.80", rebuild(board).get(0).label); // Selected-side perspective.
+        ReflectionHelpers.setField(service, "currentPvs", Collections.singletonList(new StockfishEngine.Pv("e2e4", -99998, true)));
+        assertEquals("★ -M2", rebuild(board).get(0).label);
+    }
+
+    @Test public void missingEngineScoreIsShownAsUnavailableInsteadOfAnInventedEqualPosition() {
+        StockfishEngine.Pv unknown = ReflectionHelpers.callConstructor(StockfishEngine.Pv.class,
+                from(List.class, Collections.singletonList("e2e4")), from(int.class, 0),
+                from(boolean.class, false), from(boolean.class, false));
+        ReflectionHelpers.setField(service, "currentPvs", Collections.singletonList(unknown));
+        assertEquals("★ —", rebuild(new BoardDetector.Board(10,100,320,1)).get(0).label);
+    }
+
     @Test public void queuedResultsCannotPublishAcrossEditingPauseOrNewEpoch() {
         int[] published = {0};
         Runnable update = () -> published[0]++;

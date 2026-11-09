@@ -147,7 +147,7 @@ public class OverlayServiceTest {
         for (int pixel : mask) if ((pixel >>> 24) != 0) opaque++;
         assertTrue(opaque > 0);
         assertTrue(opaque <= root.getWidth()*root.getHeight());
-        assertEquals(Math.round(48*root.getResources().getDisplayMetrics().density), root.getWidth());
+        assertEquals(Math.round(152*root.getResources().getDisplayMetrics().density), root.getWidth());
     }
 
     @Test public void settingsVisibilityKeepsBubbleHiddenWhenACleanFrameFinishes() {

@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.View;
 
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ public class ArrowOverlayView extends View {
     private final Paint frame  = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint label  = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint labelBg= new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint labelBorder = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path  headPath = new Path();
 
     public ArrowOverlayView(Context ctx) {
@@ -52,6 +54,8 @@ public class ArrowOverlayView extends View {
         label.setFakeBoldText(true);
         labelBg.setStyle(Paint.Style.FILL);
         labelBg.setColor(0xCC000000);
+        labelBorder.setStyle(Paint.Style.STROKE);
+        labelBorder.setStrokeWidth(2f);
     }
 
     public void setArrows(List<Arrow> a) {
@@ -91,6 +95,7 @@ public class ArrowOverlayView extends View {
             frame.setColor(boardFrameColor);
             c.drawRect(boardBounds, frame);
         }
+        List<RectF> labels = new ArrayList<>();
         for (Arrow a : arrows) {
             shadow.setStrokeWidth(a.widthPx + 6f);
             stroke.setStrokeWidth(a.widthPx);
@@ -114,14 +119,37 @@ public class ArrowOverlayView extends View {
             headPath.close();
             c.drawPath(headPath, head);
 
-            if (a.label != null) {
-                float tx = (a.sx + a.ex) / 2f;
-                float ty = (a.sy + a.ey) / 2f;
-                float w = label.measureText(a.label) + 18f;
-                c.drawRoundRect(tx - w / 2, ty - 24, tx + w / 2, ty + 14, 10f, 10f, labelBg);
-                c.drawText(a.label, tx - (w - 18f) / 2f, ty + 8f, label);
+            if (a.label != null && !a.label.isEmpty()) {
+                RectF box = labelBounds(a, labels);
+                labels.add(box);
+                c.drawRoundRect(box, 10f, 10f, labelBg);
+                labelBorder.setColor(a.color);
+                c.drawRoundRect(box, 10f, 10f, labelBorder);
+                c.save();
+                c.clipRect(box);
+                c.drawText(a.label, box.left + 9f, box.bottom - 6f, label);
+                c.restore();
             }
         }
         c.restore();
+    }
+
+    /** Keep short score chips readable when candidates share the same starting square. */
+    RectF labelBounds(Arrow arrow, List<RectF> placed) {
+        Rect limits = boardBounds != null && !boardBounds.isEmpty() ? boardBounds
+                : new Rect(0, 0, getWidth(), getHeight());
+        float width = Math.min(label.measureText(arrow.label) + 18f, Math.max(1, limits.width()));
+        float height = Math.min(38f, Math.max(1, limits.height()));
+        float x = Math.max(limits.left, Math.min((arrow.sx + arrow.ex - width) / 2, limits.right - width));
+        RectF fallback = null;
+        for (int offset : new int[]{0, -1, 1, -2, 2, -3, 3}) {
+            float y = Math.max(limits.top, Math.min((arrow.sy + arrow.ey) / 2 - 24 + offset*(height+4), limits.bottom-height));
+            RectF box = new RectF(x, y, x+width, y+height);
+            if (fallback == null) fallback = box;
+            boolean intersects = false;
+            for (RectF other : placed) if (RectF.intersects(box, other)) intersects = true;
+            if (!intersects) return box;
+        }
+        return fallback;
     }
 }

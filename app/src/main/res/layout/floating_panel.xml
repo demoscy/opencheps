@@ -1,230 +1,168 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/panelRoot"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
-<ScrollView
-    android:id="@+id/panelExpanded"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content">
-<LinearLayout
     android:orientation="vertical"
     android:background="@drawable/panel_bg"
-    android:padding="10dp"
+    android:padding="4dp"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
     <LinearLayout
+        android:id="@+id/panelDragHandle"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
-
-        <ImageView
+        android:layout_height="48dp">
+        <ImageButton
             android:id="@+id/panelIcon"
             android:src="@mipmap/ic_launcher"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:contentDescription="OpenCheps"/>
-
-        <LinearLayout
-            android:id="@+id/panelDragHandle"
-            android:orientation="vertical"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content">
-            <TextView
-                android:id="@+id/panelTitle"
-                android:text="OpenCheps"
-                android:textColor="#FFFFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
-            <TextView
-                android:id="@+id/panelStatus"
-                android:text="Starting…"
-                android:textColor="#FFA5D6A7"
-                android:textSize="10sp"
-                android:maxWidth="180dp"
-                android:singleLine="true"
-                android:ellipsize="end"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
-        </LinearLayout>
-
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:contentDescription="@string/panel_minimize"
+            android:layout_width="48dp"
+            android:layout_height="48dp"/>
+        <ImageButton
+            android:id="@+id/panelColor"
+            android:src="@drawable/ic_side_white"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="10dp"
+            android:contentDescription="@string/panel_color_white"
+            android:layout_width="48dp"
+            android:layout_height="48dp"/>
         <ImageButton
             android:id="@+id/panelRecal"
             android:background="@drawable/panel_btn_alt"
             android:src="@android:drawable/ic_menu_rotate"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginEnd="3dp"
-            android:contentDescription="@string/position_read"/>
-
-        <ImageButton
-            android:id="@+id/panelToggle"
-            android:background="@drawable/panel_btn"
-            android:src="@android:drawable/ic_media_pause"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:layout_marginEnd="3dp"
-            android:contentDescription="Pause"/>
-
-        <ImageButton
-            android:id="@+id/panelStop"
-            android:background="@drawable/panel_btn_stop"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:contentDescription="Stop"/>
+            android:padding="12dp"
+            android:contentDescription="@string/position_read"
+            android:layout_width="48dp"
+            android:layout_height="48dp"/>
+        <LinearLayout
+            android:id="@+id/panelExpandedActions"
+            android:orientation="horizontal"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp">
+            <ImageButton
+                android:id="@+id/panelSettings"
+                android:src="@drawable/ic_panel_settings"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="12dp"
+                android:contentDescription="@string/panel_settings"
+                android:layout_width="48dp"
+                android:layout_height="48dp"/>
+            <ImageButton
+                android:id="@+id/panelToggle"
+                android:src="@android:drawable/ic_media_pause"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="12dp"
+                android:contentDescription="@string/panel_pause"
+                android:layout_width="48dp"
+                android:layout_height="48dp"/>
+            <ImageButton
+                android:id="@+id/panelStop"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:padding="12dp"
+                android:contentDescription="@string/stop"
+                android:layout_width="48dp"
+                android:layout_height="48dp"/>
+        </LinearLayout>
     </LinearLayout>
 
-    <LinearLayout
-        android:orientation="horizontal"
+    <ScrollView
+        android:id="@+id/panelExpanded"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
-        <Button
-            android:id="@+id/panelSettings"
-            android:text="@string/panel_settings"
-            android:textSize="12sp"
-            android:minHeight="48dp"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"/>
-        <Button
-            android:id="@+id/panelMinimize"
-            android:text="@string/panel_minimize"
-            android:textSize="12sp"
-            android:minHeight="48dp"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"/>
-    </LinearLayout>
-
-    <LinearLayout
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingTop="6dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
-
-        <TextView
-            android:text="I play:"
-            android:textColor="#FFB0BEC5"
-            android:textSize="11sp"
-            android:paddingEnd="8dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
-        <TextView
-            android:id="@+id/sideWhite"
-            android:text="WHITE"
-            android:textColor="#FF000000"
-            android:textStyle="bold"
-            android:textSize="11sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="5dp"
-            android:paddingBottom="5dp"
-            android:background="@drawable/pill_white"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="6dp"/>
-
-        <TextView
-            android:id="@+id/sideBlack"
-            android:text="BLACK"
-            android:textColor="#FFCCCCCC"
-            android:textSize="11sp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:paddingTop="5dp"
-            android:paddingBottom="5dp"
-            android:background="@drawable/pill_unselected"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-    </LinearLayout>
-
-    <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-        <Button
-            android:id="@+id/panelTurn"
-            android:text="@string/position_turn_white"
-            android:textAllCaps="false"
-            android:textSize="11sp"
-            android:minHeight="48dp"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"/>
-        <Button
-            android:id="@+id/panelFlip"
-            android:text="@string/position_bottom_white"
-            android:contentDescription="@string/position_flip"
-            android:textAllCaps="false"
-            android:textSize="11sp"
-            android:minHeight="48dp"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"/>
-    </LinearLayout>
-
-    <LinearLayout
-        android:orientation="horizontal"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-        <Button
-            android:id="@+id/panelBoardArea"
-            android:text="@string/board_area_set"
-            android:textSize="11sp"
-            android:minHeight="48dp"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"/>
-        <Button
-            android:id="@+id/panelCheckBoard"
-            android:text="@string/board_check"
-            android:textSize="11sp"
-            android:minHeight="48dp"
-            android:layout_weight="1"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"/>
-    </LinearLayout>
-
-    <TextView
-        android:id="@+id/panelEval"
-        android:text=""
-        android:textColor="#FFFFEB3B"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        android:paddingTop="4dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"/>
-    <TextView
-        android:id="@+id/panelContinuation"
-        android:textColor="#FFB0BEC5"
-        android:textSize="11sp"
-        android:fontFamily="monospace"
-        android:maxWidth="280dp"
-        android:maxLines="4"
-        android:ellipsize="end"
-        android:visibility="gone"
-        android:paddingTop="4dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"/>
+        <LinearLayout
+            android:orientation="vertical"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <TextView
+                android:id="@+id/panelStatus"
+                android:text="@string/status_starting"
+                android:textColor="#FFA5D6A7"
+                android:textSize="11sp"
+                android:maxWidth="276dp"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+            <LinearLayout
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="48dp">
+                <Button
+                    android:id="@+id/panelTurn"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:text="@string/position_turn_white"
+                    android:textAllCaps="false"
+                    android:textColor="#FFD3E8DA"
+                    android:textSize="12sp"
+                    android:layout_weight="1"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"/>
+                <Button
+                    android:id="@+id/panelFlip"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:text="@string/position_bottom_white"
+                    android:contentDescription="@string/position_flip"
+                    android:textAllCaps="false"
+                    android:textColor="#FFD3E8DA"
+                    android:textSize="12sp"
+                    android:layout_weight="1"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"/>
+            </LinearLayout>
+            <LinearLayout
+                android:orientation="horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="48dp">
+                <Button
+                    android:id="@+id/panelBoardArea"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:text="@string/board_area_set"
+                    android:textAllCaps="false"
+                    android:textColor="#FFD3E8DA"
+                    android:textSize="12sp"
+                    android:layout_weight="1"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"/>
+                <Button
+                    android:id="@+id/panelCheckBoard"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:text="@string/board_check"
+                    android:textAllCaps="false"
+                    android:textColor="#FFD3E8DA"
+                    android:textSize="12sp"
+                    android:layout_weight="1"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"/>
+            </LinearLayout>
+            <TextView
+                android:id="@+id/panelEval"
+                android:textColor="#FFFFEB3B"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                android:paddingTop="2dp"
+                android:paddingBottom="4dp"
+                android:maxWidth="276dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+            <TextView
+                android:id="@+id/panelContinuation"
+                android:textColor="#FFB0BEC5"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:maxWidth="276dp"
+                android:maxLines="4"
+                android:ellipsize="end"
+                android:visibility="gone"
+                android:paddingBottom="4dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+        </LinearLayout>
+    </ScrollView>
 </LinearLayout>
-</ScrollView>
-    <ImageButton
-        android:id="@+id/panelBubble"
-        android:src="@mipmap/ic_launcher"
-        android:background="@drawable/panel_bubble"
-        android:padding="8dp"
-        android:scaleType="fitCenter"
-        android:contentDescription="@string/panel_expand"
-        android:visibility="gone"
-        android:layout_width="48dp"
-        android:layout_height="48dp"/>
-</FrameLayout>

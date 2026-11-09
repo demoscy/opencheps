@@ -13,7 +13,7 @@ template training. There is no “show starting position” requirement. Use a n
 frame. Two matching recognized frames are required before adopting a position.
 Recognition confidence and sanity checks cannot guarantee correct analysis.
 
-- **I play White / Black** selects the side to analyze and defaults the board
+- **White/Black pawn icon** selects the side to analyze and defaults the board
   orientation to that side at the bottom.
 - **Turn** explicitly sets whose turn it is in an existing position. Subsequent
   recognized moves update it; arrows appear only for the selected analysis side.
@@ -28,14 +28,18 @@ puzzle/history jump can require Read current position and Turn selection.
 
 ## Compact controls and settings
 
-**Minimize** replaces the floating panel with a draggable 48 dp OpenCheps bubble.
-Tap the bubble to expand it; drag the panel title or bubble to reposition it.
-Minimizing keeps analysis, arrows and the existing Pause state. The bubble stays
-minimized across background transitions and rotation in the current session.
-Controls are clamped away from system bars/cutouts; the expanded panel scrolls
-when the display is short. A new capture session starts with the expanded panel.
+Tap the **OpenCheps logo** to minimize or expand the panel; drag the logo to
+reposition it. The minimized strip keeps three 48 dp controls: logo, selected
+White/Black pawn and the blue **Read current position** button. Tap the pawn to
+switch the analysis side. Minimizing keeps analysis, arrows and normal Pause.
+The strip retains its state across background transitions and rotation within
+one capture session. Positions are clamped away from system bars/cutouts; the
+expanded panel scrolls on short displays. A new session starts expanded.
 
-**Settings** opens the existing OpenCheps app without stopping MediaProjection.
+The expanded panel uses a **gear icon for Settings**, with icon controls for
+Pause/Resume and Stop and small borderless board/turn actions below.
+
+The **gear** opens the existing OpenCheps app without stopping MediaProjection.
 The overlay hides and analysis pauses while the app screen is visible. Change
 think time, strength, move choices, study line or side, then tap **Return to board**
 or leave the app to resume. Normal Pause is preserved; changing the selected side
@@ -77,6 +81,14 @@ one-to-three next-move choices remain available. Short searches may miss tactics
 and still produce strong moves. Think time is the engine's search budget, not
 total response time: capture, recognition, two matching frames and scheduling
 also add delay. Changing time or the line setting refreshes the same position.
+
+Arrow chips show each candidate's own engine evaluation instead of its square
+coordinates, such as **+0.80**, **-1.25**, **M3** or **-M2**. Positive scores favor
+the selected analysis side; board orientation does not change this perspective.
+The star marks the selected green move, which can be weaker than alternatives
+when strength is limited. **—** means the engine supplied no score. Chip outlines
+match arrow colors; overlapping chips are shifted within the board when space
+allows. These scores are position evaluations, not move-quality classifications.
 
 ## Manual board area
 

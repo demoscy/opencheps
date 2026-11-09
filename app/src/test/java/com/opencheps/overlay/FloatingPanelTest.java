@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.WindowManager;
 import com.opencheps.R;
 import com.opencheps.ui.MainActivity;
+import com.opencheps.util.Side;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -33,7 +34,7 @@ public class FloatingPanelTest {
         service = Robolectric.buildService(OverlayService.class).create();
         panel = OverlayService.panel();
         root = ReflectionHelpers.getField(panel, "root");
-        bubble = root.findViewById(R.id.panelBubble);
+        bubble = root.findViewById(R.id.panelIcon);
         size = Math.round(48 * root.getResources().getDisplayMetrics().density);
         panel.placeBottomLeft(400, 800);
         ShadowLooper.idleMainLooper();
@@ -52,19 +53,19 @@ public class FloatingPanelTest {
     }
     @Test public void minimizeUsesOnlyBubbleBoundsAndTapRestoresPausedControls() {
         root.findViewById(R.id.panelToggle).performClick();
-        root.findViewById(R.id.panelMinimize).performClick();
+        root.findViewById(R.id.panelIcon).performClick();
         measure();
         assertTrue(panel.isMinimized());
-        assertEquals(size, root.getWidth());
-        assertEquals(size, root.getHeight());
+        assertEquals(size*3 + Math.round(8*root.getResources().getDisplayMetrics().density), root.getWidth());
+        assertEquals(size + Math.round(8*root.getResources().getDisplayMetrics().density), root.getHeight());
         assertEquals(View.GONE, root.findViewById(R.id.panelExpanded).getVisibility());
-        assertEquals(size, panel.boundsOnScreen().width());
+        assertEquals(root.getWidth(), panel.boundsOnScreen().width());
         touch(MotionEvent.ACTION_DOWN, 10, 10);
         touch(MotionEvent.ACTION_UP, 10, 10);
         assertFalse(panel.isMinimized());
         assertTrue(panel.isPaused());
         assertEquals(View.VISIBLE, root.findViewById(R.id.panelExpanded).getVisibility());
-        assertEquals(View.GONE, bubble.getVisibility());
+        assertEquals(View.VISIBLE, bubble.getVisibility());
     }
     @Test public void draggingClampsBothEdgesWithoutExpandingAndCancelIsNotATap() {
         panel.setMinimized(true);
@@ -73,8 +74,8 @@ public class FloatingPanelTest {
         touch(MotionEvent.ACTION_MOVE, 2000, 2000);
         touch(MotionEvent.ACTION_UP, 2000, 2000);
         WindowManager.LayoutParams lp = ReflectionHelpers.getField(panel, "lp");
-        assertEquals(400-size, lp.x);
-        assertEquals(800-size, lp.y);
+        assertEquals(400-root.getWidth(), lp.x);
+        assertEquals(800-root.getHeight(), lp.y);
         assertTrue(panel.isMinimized());
         touch(MotionEvent.ACTION_DOWN, 10, 10);
         touch(MotionEvent.ACTION_MOVE, -2000, -2000);
@@ -107,8 +108,8 @@ public class FloatingPanelTest {
         panel.placeBottomLeft(800,400);
         ShadowLooper.idleMainLooper();
         WindowManager.LayoutParams lp = ReflectionHelpers.getField(panel,"lp");
-        assertTrue(lp.x >= 0 && lp.x+size <= 800);
-        assertTrue(lp.y >= 0 && lp.y+size <= 400);
+        assertTrue(lp.x >= 0 && lp.x+root.getWidth() <= 800);
+        assertTrue(lp.y >= 0 && lp.y+root.getHeight() <= 400);
         OverlayService.setCapturing(true);
         assertEquals(View.INVISIBLE, root.getVisibility());
         OverlayService.suspendForCalibration();
@@ -129,6 +130,35 @@ public class FloatingPanelTest {
         assertTrue((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0);
         assertTrue((intent.getFlags() & Intent.FLAG_ACTIVITY_SINGLE_TOP) != 0);
         assertNull(shadowOf(service.get()).getNextStartedService());
+    }
+    @Test public void minimizedStripKeepsSideSwitchAndReadActionAvailable() {
+        int[] reads = {0};
+        java.util.List<Side> selected = new java.util.ArrayList<>();
+        panel.setListener(new FloatingPanel.Listener() {
+            public void onPauseToggle(boolean paused) {}
+            public void onStop() {}
+            public void onRecalibrate() { reads[0]++; }
+            public void onSetBoardArea() {}
+            public void onCheckBoard() {}
+            public void onSideChange(Side side) { selected.add(side); }
+            public void onTurnChange(Side side) {}
+            public void onFlipBoard() {}
+        });
+        panel.setMinimized(true);
+        View color = root.findViewById(R.id.panelColor);
+        assertEquals(View.VISIBLE, color.getVisibility());
+        assertEquals(View.VISIBLE, root.findViewById(R.id.panelRecal).getVisibility());
+        assertEquals(View.GONE, root.findViewById(R.id.panelExpandedActions).getVisibility());
+        root.findViewById(R.id.panelRecal).performClick();
+        color.performClick();
+        ShadowLooper.idleMainLooper();
+        assertEquals(1, reads[0]);
+        assertEquals("Analyzing Black. Tap to choose White.", color.getContentDescription().toString());
+        color.performClick();
+        ShadowLooper.idleMainLooper();
+        assertEquals(java.util.Arrays.asList(Side.BLACK, Side.WHITE), selected);
+        assertEquals("Analyzing White. Tap to choose Black.", color.getContentDescription().toString());
+        assertTrue(panel.isMinimized());
     }
     @Test public void expandedControlsScrollOnShortScreensAndBubbleHasTheSharedPhysicalOrigin() {
         measure();

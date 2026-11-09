@@ -53,6 +53,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ScreenCaptureService extends Service {
@@ -1012,10 +1013,8 @@ public class ScreenCaptureService extends Service {
             Rect renderedBounds = boardBoundsOnScreen(board);
             publish(() -> OverlayService.pushArrows(rendered, renderedBounds));
             StockfishEngine.Pv best = pvs.get(0);
-            String evalStr = !best.hasScore ? "" : best.mate
-                    ? "M" + Math.abs(plyToMate(best.cp))
-                    : String.format("%+.2f", best.cp / 100.0);
-            panelEval("YOU (" + userSide + ") " + formatUci(best.uci) + "  " + evalStr);
+            String evalStr = scoreText(best);
+            panelEval(formatUci(best.uci) + "  " + evalStr);
             refreshStudyLine();
             panelStatus(strength == 0 ? "Your move (" + dt + " ms)" : "Practice · " + strength + " Elo (approx.)");
         } catch (Exception e) {
@@ -1050,7 +1049,7 @@ public class ScreenCaptureService extends Service {
             int tx = uci.charAt(2) - 'a', ty = 8 - (uci.charAt(3) - '0');
             float[] from = mapping.squareCenter(fx, fy, persp == Side.BLACK);
             float[] to = mapping.squareCenter(tx, ty, persp == Side.BLACK);
-            String lbl = (i == 0 ? "★ " : "") + uci;
+            String lbl = (i == 0 ? "★ " : "") + scoreText(pvs.get(i));
             float width = Math.max(8f, widths[i] * Math.min(1.5f, cellAvg / 60f));
             out.add(new ArrowOverlayView.Arrow(from[0], from[1], to[0], to[1], colors[i], width, lbl));
         }
@@ -1088,7 +1087,11 @@ public class ScreenCaptureService extends Service {
         return base;
     }
 
-    private int plyToMate(int cp) { return cp > 0 ? 100000 - cp : -(100000 + cp); }
+    private static String scoreText(StockfishEngine.Pv pv) {
+        if (!pv.hasScore) return "—";
+        if (pv.mate) return (pv.cp < 0 ? "-M" : "M") + Math.max(0, 100000L - Math.abs((long) pv.cp));
+        return String.format(Locale.ROOT, "%+.2f", pv.cp / 100.0);
+    }
 
     private String formatUci(String uci) {
         if (uci == null || uci.length() < 4) return uci == null ? "?" : uci;

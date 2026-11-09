@@ -26,15 +26,15 @@ public class FloatingPanel {
     private final WindowManager wm;
     private View root;
     private WindowManager.LayoutParams lp;
-    private TextView statusTv, evalTv, sideWhiteTv, sideBlackTv, continuationTv;
-    private ImageButton toggleBtn;
+    private TextView statusTv, evalTv, continuationTv;
+    private ImageButton toggleBtn, colorBtn;
     private Button turnBtn, flipBtn;
     private Side turn = Side.WHITE;
     private boolean paused = false;
     private Side userSide = Side.WHITE;
     private int screenW, screenH;
     private boolean minimized, positioned;
-    private View expanded, bubble;
+    private View expanded, expandedActions, logo;
 
     public interface Listener {
         void onPauseToggle(boolean paused);
@@ -60,9 +60,11 @@ public class FloatingPanel {
         if (root != null) return true;
         root = LayoutInflater.from(ctx).inflate(R.layout.floating_panel, null);
         expanded = root.findViewById(R.id.panelExpanded);
-        bubble = root.findViewById(R.id.panelBubble);
-        root.findViewById(R.id.panelMinimize).setOnClickListener(v -> setMinimized(true));
-        bubble.setOnClickListener(v -> setMinimized(false));
+        expandedActions = root.findViewById(R.id.panelExpandedActions);
+        logo = root.findViewById(R.id.panelIcon);
+        logo.setOnClickListener(v -> setMinimized(!minimized));
+        colorBtn = root.findViewById(R.id.panelColor);
+        colorBtn.setOnClickListener(v -> chooseSide(userSide == Side.WHITE ? Side.BLACK : Side.WHITE));
         root.findViewById(R.id.panelSettings).setOnClickListener(v -> {
             try {
                 ctx.startActivity(new Intent(ctx, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
@@ -72,8 +74,6 @@ public class FloatingPanel {
         statusTv    = root.findViewById(R.id.panelStatus);
         evalTv      = root.findViewById(R.id.panelEval);
         continuationTv = root.findViewById(R.id.panelContinuation);
-        sideWhiteTv = root.findViewById(R.id.sideWhite);
-        sideBlackTv = root.findViewById(R.id.sideBlack);
         toggleBtn   = root.findViewById(R.id.panelToggle);
         turnBtn = root.findViewById(R.id.panelTurn);
         flipBtn = root.findViewById(R.id.panelFlip);
@@ -82,6 +82,7 @@ public class FloatingPanel {
         });
         flipBtn.setOnClickListener(v -> { if (listener != null) listener.onFlipBoard(); });
         ImageButton stopBtn  = root.findViewById(R.id.panelStop);
+        stopBtn.setColorFilter(0xFFEF7070);
         ImageButton recalBtn = root.findViewById(R.id.panelRecal);
 
         toggleBtn.setOnClickListener(v -> {
@@ -89,7 +90,8 @@ public class FloatingPanel {
             toggleBtn.setImageResource(paused
                     ? android.R.drawable.ic_media_play
                     : android.R.drawable.ic_media_pause);
-            bubble.setContentDescription(ctx.getString(paused ? R.string.panel_expand_paused : R.string.panel_expand));
+            toggleBtn.setContentDescription(ctx.getString(paused ? R.string.panel_resume : R.string.panel_pause));
+            updateLogoDescription();
             if (listener != null) listener.onPauseToggle(paused);
         });
         stopBtn.setOnClickListener(v -> {
@@ -104,8 +106,6 @@ public class FloatingPanel {
         root.findViewById(R.id.panelBoardArea).setOnClickListener(v -> {
             if (listener != null) listener.onSetBoardArea();
         });
-        sideWhiteTv.setOnClickListener(v -> chooseSide(Side.WHITE));
-        sideBlackTv.setOnClickListener(v -> chooseSide(Side.BLACK));
 
         // Match the arrow/editor origin; clamp the smaller window within the safe screen.
         lp = OverlayWindow.fullScreen(true);
@@ -153,7 +153,7 @@ public class FloatingPanel {
         };
         root.setOnTouchListener(drag);
         root.findViewById(R.id.panelDragHandle).setOnTouchListener(drag);
-        bubble.setOnTouchListener(drag);
+        logo.setOnTouchListener(drag);
         root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> clampPosition());
 
         try { wm.addView(root, lp); }
@@ -170,20 +170,14 @@ public class FloatingPanel {
     }
 
     private void renderSideToggle() {
-        if (sideWhiteTv == null || sideBlackTv == null) return;
-        sideWhiteTv.post(() -> {
-            if (userSide == Side.WHITE) {
-                sideWhiteTv.setBackgroundResource(R.drawable.pill_white);
-                sideWhiteTv.setTextColor(0xFF000000);
-                sideBlackTv.setBackgroundResource(R.drawable.pill_unselected);
-                sideBlackTv.setTextColor(0xFFCCCCCC);
-            } else {
-                sideBlackTv.setBackgroundResource(R.drawable.pill_black);
-                sideBlackTv.setTextColor(0xFFFFFFFF);
-                sideWhiteTv.setBackgroundResource(R.drawable.pill_unselected);
-                sideWhiteTv.setTextColor(0xFFCCCCCC);
-            }
-        });
+        if (colorBtn == null) return;
+        Runnable update = () -> {
+            colorBtn.setImageResource(userSide == Side.WHITE ? R.drawable.ic_side_white : R.drawable.ic_side_black);
+            colorBtn.setContentDescription(ctx.getString(userSide == Side.WHITE
+                    ? R.string.panel_color_white : R.string.panel_color_black));
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) update.run();
+        else colorBtn.post(update);
     }
 
     public void setUserSide(Side s) {
@@ -235,7 +229,8 @@ public class FloatingPanel {
         if (root == null) return;
         minimized = value;
         expanded.setVisibility(value ? View.GONE : View.VISIBLE);
-        bubble.setVisibility(value ? View.VISIBLE : View.GONE);
+        expandedActions.setVisibility(value ? View.GONE : View.VISIBLE);
+        updateLogoDescription();
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
         try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         root.requestLayout();
@@ -243,6 +238,11 @@ public class FloatingPanel {
     }
 
     public boolean isMinimized() { return minimized; }
+
+    private void updateLogoDescription() {
+        logo.setContentDescription(ctx.getString(minimized
+                ? paused ? R.string.panel_expand_paused : R.string.panel_expand : R.string.panel_minimize));
+    }
 
     public void setPosition(Side sideToMove, Side bottom) {
         turn = sideToMove;

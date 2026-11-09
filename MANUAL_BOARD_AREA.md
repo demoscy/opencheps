@@ -9,7 +9,7 @@ or Internet permission. Screenshots remain in memory and are never saved/uploade
 1. Open an existing Chess.com puzzle, without returning to its starting position.
    Use a normal 2D piece theme. Start OpenCheps and share Chess.com as a full-screen
    app, or share the entire display. Select the side you want to analyze with
-   **I play: WHITE / BLACK**.
+   **White/Black selection** (the pawn icon in the overlay).
 2. Tap **Set board area**. Drag the square or its corners to match the exact outer
    edges of the playable 8×8 board, excluding outside labels, clocks and borders.
    **Save** remembers this layout. **Cancel** changes nothing. **Auto** clears all
@@ -35,14 +35,16 @@ or Internet permission. Screenshots remain in memory and are never saved/uploade
 
 ## Bubble and settings during capture
 
-Tap **Minimize** to reduce the controls to a draggable 48 dp bubble. Tap it to
-restore the panel. Drag the panel title to move expanded controls. Minimizing
-does not pause analysis or hide move arrows; the existing Pause state remains.
-The bubble is hidden for clean entire-screen captures, just like the full panel,
-and only its current bounds are masked in change probes. Rotation clamps the
-bubble to the new usable display; the expanded card scrolls on short screens.
+Tap the **OpenCheps logo** to minimize or expand controls, and drag the logo to
+move them. The minimized strip is 152×56 dp with three 48 dp touch targets:
+logo, selected White/Black pawn and the blue **Read current position** button.
+Tap the pawn to switch sides; re-read works without expanding. It retains normal
+Pause and does not hide analysis arrows. The strip hides for clean entire-screen
+captures; only its current bounds are masked in change probes. Rotation clamps
+it to the new usable display. The smaller expanded panel uses a gear for Settings,
+Pause/Stop icons and borderless actions, and scrolls on short screens.
 
-Tap **Settings** to bring the existing app screen forward. Capture permission
+Tap the **gear** to bring the existing app screen forward. Capture permission
 remains active while analysis and overlays pause. Change settings and use
 **Return to board**, Back or switch apps. A compositor delay, fresh-frame check
 and epoch barrier prevent the settings screen or obsolete results entering
@@ -53,8 +55,9 @@ capture stops. Rotation/recreation and quick reentry cancel older resume tasks.
 
 Phone checks:
 
-- Minimize while running and paused. Drag to all edges; tap to expand. Arrows
-  continue only when running, and a drag/cancel should not expand the bubble.
+- Tap the logo while running and paused. Drag it to all edges; tap to expand. Arrows
+  continue only when running, and a drag/cancel should not toggle the panel. Use
+  the minimized pawn and blue read button; verify side persistence and fresh reads.
 - Rotate with the bubble visible. Expand in landscape and check scrolling and
   Stop/Settings access. Test large display/text sizes and navigation gestures.
 - Open Settings without stopping capture. Change think time, choices, strength,
@@ -110,6 +113,20 @@ Phone speed check: on the same stationary puzzle/bot board, compare 1500 ms with
 100 ms and the line off. Then enable the line and verify it follows green;
 disable it again and verify it clears. Change time during a search and confirm
 the next result reflects the new value. Check persistence after reopening settings.
+
+## Engine scores on arrows
+
+Each arrow chip shows its own engine score, with a matching colored outline.
+**+0.80** favors the selected analysis side, **-1.25** favors its opponent,
+**M3** is a mating score and **-M2** a losing mate score. **—** means no score was
+reported. The star denotes the selected green move; with Elo limiting it is not
+necessarily the strongest candidate. Changing board orientation alone does not
+reverse scores. The expanded panel retains the coordinate move and score.
+
+Phone check: enable three candidates and compare their chip scores. Check a mate
+line and Black-side analysis. Shared-origin chips should separate when the board
+has space, remain readable near edges, and clear with analysis on pause, settings
+or uncertain recognition. Move-quality labels such as “Great” are not inferred.
 
 ## Check a rejected board
 
@@ -215,8 +232,8 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-09: all 129 unit/Robolectric tests passed; both ARM debug APK
-splits built; lint completed with zero errors and 54 warnings. `git diff --check`
+Validation on 2026-11-09: all 136 unit/Robolectric tests passed; both ARM debug APK
+splits built; lint completed with zero errors and 44 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
 are desktop build/test evidence, not a physical-device acceptance result.
@@ -266,3 +283,11 @@ Push the feature branch to update its pull request, then open **Actions → Andr
 CI → successful run → Artifacts → opencheps-arm64-v8a-debug**. Download, unzip and
 install the APK on the Pixel. The armeabi-v7a artifact is for older 32-bit phones.
 **Run workflow** can select the feature branch without merging it into main.
+
+Compact-panel checks also verify logo tap/drag, the minimized pawn/read controls,
+individual arrow scores, mate sign, unavailable-score fallback and score-chip
+separation/edge clamping. A native-rendered 360 dp phone fixture measures the
+expanded panel at 296×190 dp for the sample state and the strip at 152×56 dp,
+with 48 dp header targets. Synthetic UI previews are written to build/reports/
+ui-preview during tests; they contain no phone capture and are not APK assets.
+Device checks remain necessary for touch, font scaling and overlay composition.
