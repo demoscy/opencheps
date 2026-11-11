@@ -69,16 +69,18 @@ Phone checks:
 
 ## Practice strength and study line
 
-In OpenCheps settings, **Move choices** selects one to three candidate arrows,
-defaulting to three. Saved older choice counts are retained. Green is the selected
-move; amber and blue are distinct ranked alternatives. Fewer arrows appear if
+In OpenCheps settings, **Move choices** selects one to five candidate arrows,
+defaulting to three. Saved older choice counts are retained. Green is the highest
+displayed score, followed by amber, blue, purple and pink. **★** marks the engine's
+selected move and can be on a lower-scoring color when strength is limited.
+One-choice mode keeps that Elo-selected move and colors it green. Fewer arrows appear if
 there are fewer legal choices or the search returns fewer candidates.
 
 Optionally check **Limit practice strength**, then select 1320–3190 Elo on Stockfish 18's
 approximate calibration scale. It is not a Chess.com rating or human model.
 Uncheck to restore full strength; the selected practice value is remembered.
 Think time no longer displays an invented Elo estimate.
-The cap applies to the green move; additional arrows are analysis alternatives.
+The cap applies to the ★ selected move; additional arrows are analysis alternatives.
 
 Enable **Show a 3-move study line** for up to three moves per side, alternating
 White/Black across six half-moves. It is one possible continuation, not a forecast.
@@ -93,12 +95,12 @@ concealment behavior is added.
 
 Phone checks: change the practice rating and return to the same position; verify
 its old recommendation clears/recalculates. Toggle back to full strength. Enable
-the line and check its first move equals the green arrow, White/Black alternate,
+the line and check its first move equals the ★ selected arrow, White/Black alternate,
 and the panel remains readable. Pause or move to an unclear board and confirm
 both old evaluation and continuation clear. Restart to check settings persist.
-Change Move choices between one and three on the same stationary position and
+Change Move choices between one and five on the same stationary position and
 verify the recommendation refreshes, distinct arrows appear, and the line still
-follows green. Relaunch to verify the choice count persists.
+follows ★. Relaunch to verify the choice count persists.
 
 For quicker puzzle or bot suggestions, set **Think time** to **100–300 ms** and
 disable **Show a 3-move study line**. The default remains 1500 ms; existing saved
@@ -110,7 +112,7 @@ inference, two matching frames and scheduling remain part of the total latency.
 The 100 ms setting is not a promise of a 100 ms response or human-like play.
 
 Phone speed check: on the same stationary puzzle/bot board, compare 1500 ms with
-100 ms and the line off. Then enable the line and verify it follows green;
+100 ms and the line off. Then enable the line and verify it follows ★;
 disable it again and verify it clears. Change time during a search and confirm
 the next result reflects the new value. Check persistence after reopening settings.
 
@@ -119,11 +121,11 @@ the next result reflects the new value. Check persistence after reopening settin
 Each arrow chip shows its own engine score, with a matching colored outline.
 **+0.80** favors the selected analysis side, **-1.25** favors its opponent,
 **M3** is a mating score and **-M2** a losing mate score. **—** means no score was
-reported. The star denotes the selected green move; with Elo limiting it is not
+reported. The star denotes the selected move; with Elo limiting it is not
 necessarily the strongest candidate. Changing board orientation alone does not
 reverse scores. The expanded panel retains the coordinate move and score.
 
-Phone check: enable three candidates and compare their chip scores. Check a mate
+Phone check: enable five candidates and compare their chip scores and colors. Check a mate
 line and Black-side analysis. Shared-origin chips should separate when the board
 has space, remain readable near edges, and clear with analysis on pause, settings
 or uncertain recognition. Move-quality labels such as “Great” are not inferred.
@@ -232,7 +234,7 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-09: all 136 unit/Robolectric tests passed; both ARM debug APK
+Validation on 2026-11-11: all 142 unit/Robolectric tests passed; both ARM debug APK
 splits built; lint completed with zero errors and 44 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
@@ -247,7 +249,7 @@ transitions, six-half-move lines rooted in each selected move, and an empty
 result in checkmate. This verifies the host protocol, not ARM execution or
 an empirical Elo rating. Unit tests additionally cover handicap reapplication,
 truncated reports, selected-root preservation, settings changes during search,
-saved one-to-three choice counts, promotion formatting and continuation clearing.
+saved one-to-five choice counts, promotion formatting and continuation clearing.
 Preview tests cover crop ownership, pause/turn preservation, rotation cancellation
 and permission rejection. Recognition diagnostics retain rejected predictions for
 inspection while keeping them excluded from engine input. The exact cause of the
@@ -291,3 +293,21 @@ expanded panel at 296×190 dp for the sample state and the strip at 152×56 dp,
 with 48 dp header targets. Synthetic UI previews are written to build/reports/
 ui-preview during tests; they contain no phone capture and are not APK assets.
 Device checks remain necessary for touch, font scaling and overlay composition.
+
+The November 11 follow-up draws all shafts/heads before opaque score boxes,
+retains matching color borders, and expands placement searches for five chips.
+Native raster tests verify that a later collinear arrow cannot cover an earlier
+score/background/border, plus five-chip separation near a board edge. Ranking
+tests cover finite scores, mate distance/sign, unavailable scores, ties and an
+Elo-selected move that differs from green. Preferences/activity tests cover the
+new five-choice limit and persistence while preserving the three-choice default.
+The production UCI adapter also returned five distinct legal choices from official
+Stockfish 18 at full strength and with Elo limiting, four choices after switching
+settings, and one Elo-selected choice. These host checks do not verify phone
+performance or guarantee five moves in terminal/constrained positions.
+
+Device acceptance: show two candidates in the same direction, then five choices;
+check that every score box stays above lines and retains its matching border.
+Verify that green has the highest displayed score. Keep Elo limiting on and check
+that ★, the panel move and Selected continuation still follow the chosen move,
+including after switching back to one choice.

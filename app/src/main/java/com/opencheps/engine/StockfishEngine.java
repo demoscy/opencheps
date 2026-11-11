@@ -93,7 +93,7 @@ public class StockfishEngine {
     public synchronized List<Pv> analyze(String fen, int movetimeMs, int elo, int requestedChoices,
                                          boolean includeContinuation) throws Exception {
         if (!ready) throw new IllegalStateException("engine not started");
-        int choices = Math.max(1, Math.min(3, requestedChoices));
+        int choices = Prefs.clampMoveChoices(requestedChoices);
         setMultiPv(choices);
         setStrength(elo);
         int time = Prefs.clampThinkMs(movetimeMs);

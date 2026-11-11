@@ -109,6 +109,7 @@ public class OverlayServiceTest {
         View root = ReflectionHelpers.getField(panel, "root");
         View line = root.findViewById(com.opencheps.R.id.panelContinuation);
         panel.setContinuation("W e2→e4   B e7→e5");
+        assertTrue(((android.widget.TextView)line).getText().toString().startsWith("Selected continuation:"));
         assertEquals(View.VISIBLE, line.getVisibility());
         panel.setEval("");
         assertEquals(View.GONE, line.getVisibility());

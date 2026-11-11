@@ -53,7 +53,7 @@ public class ArrowOverlayView extends View {
         label.setTextSize(30f);
         label.setFakeBoldText(true);
         labelBg.setStyle(Paint.Style.FILL);
-        labelBg.setColor(0xCC000000);
+        labelBg.setColor(0xFF101810);
         labelBorder.setStyle(Paint.Style.STROKE);
         labelBorder.setStrokeWidth(2f);
     }
@@ -95,7 +95,6 @@ public class ArrowOverlayView extends View {
             frame.setColor(boardFrameColor);
             c.drawRect(boardBounds, frame);
         }
-        List<RectF> labels = new ArrayList<>();
         for (Arrow a : arrows) {
             shadow.setStrokeWidth(a.widthPx + 6f);
             stroke.setStrokeWidth(a.widthPx);
@@ -118,7 +117,11 @@ public class ArrowOverlayView extends View {
             headPath.lineTo(rx, ry);
             headPath.close();
             c.drawPath(headPath, head);
+        }
 
+        // Every shaft/head must be below every score chip, including later candidates.
+        List<RectF> labels = new ArrayList<>();
+        for (Arrow a : arrows) {
             if (a.label != null && !a.label.isEmpty()) {
                 RectF box = labelBounds(a, labels);
                 labels.add(box);
@@ -142,7 +145,8 @@ public class ArrowOverlayView extends View {
         float height = Math.min(38f, Math.max(1, limits.height()));
         float x = Math.max(limits.left, Math.min((arrow.sx + arrow.ex - width) / 2, limits.right - width));
         RectF fallback = null;
-        for (int offset : new int[]{0, -1, 1, -2, 2, -3, 3}) {
+        for (int step = 0; step <= 2*(placed.size()+1); step++) {
+            int offset = step % 2 == 0 ? step/2 : -(step+1)/2;
             float y = Math.max(limits.top, Math.min((arrow.sy + arrow.ey) / 2 - 24 + offset*(height+4), limits.bottom-height));
             RectF box = new RectF(x, y, x+width, y+height);
             if (fallback == null) fallback = box;

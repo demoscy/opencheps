@@ -126,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
         });
         SeekBar choices = findViewById(R.id.multiPvBar);
         TextView choicesLabel = findViewById(R.id.multiPvLabel);
-        choices.setMax(2);
+        choices.setMax(Prefs.MAX_MOVE_CHOICES - 1);
         choices.setProgress(Prefs.multiPv(this) - 1);
         choicesLabel.setText(getString(R.string.move_choices, Prefs.multiPv(this)));
         choices.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {

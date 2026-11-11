@@ -90,6 +90,56 @@ public class ScreenCaptureServiceTest {
         assertEquals("★ —", rebuild(new BoardDetector.Board(10,100,320,1)).get(0).label);
     }
 
+    @Test public void fiveChoicesColorTheHighestDisplayedScoreGreenWithoutReplacingTheEloSelectedMove() {
+        com.opencheps.util.Prefs.setMultiPv(service, 5);
+        List<StockfishEngine.Pv> pvs = java.util.Arrays.asList(
+                new StockfishEngine.Pv("e2e4",10,false), new StockfishEngine.Pv("d2d4",300,false),
+                new StockfishEngine.Pv("g1f3",100,false), new StockfishEngine.Pv("c2c4",500,false),
+                new StockfishEngine.Pv("b1c3",200,false));
+        ReflectionHelpers.setField(service,"currentPvs",pvs);
+        BoardDetector.Board board = new BoardDetector.Board(10,100,320,1);
+        List<ArrowOverlayView.Arrow> arrows = rebuild(board);
+        assertEquals(5,arrows.size());
+        assertEquals(0xFFFF6E8A,arrows.get(0).color);
+        assertEquals("★ +0.10",arrows.get(0).label);
+        assertEquals(0xFFFFB300,arrows.get(1).color);
+        assertEquals(0xFFAB47BC,arrows.get(2).color);
+        assertEquals(0xFF00C853,arrows.get(3).color);
+        assertEquals(0xFF29B6F6,arrows.get(4).color);
+        assertSame(pvs,ReflectionHelpers.getField(service,"currentPvs"));
+        // One choice retains the handicapped root; its sole displayed score is green.
+        com.opencheps.util.Prefs.setMultiPv(service,1);
+        assertEquals(0xFF00C853,rebuild(board).get(0).color);
+        assertEquals("★ +0.10",rebuild(board).get(0).label);
+        com.opencheps.util.Prefs.setMultiPv(service,2);
+        assertEquals(0xFF00C853,rebuild(board).get(1).color); // Hidden +5.00 does not rank.
+    }
+
+    @Test public void greenRankingHandlesMatesUnknownScoresAndStableTies() {
+        com.opencheps.util.Prefs.setMultiPv(service,5);
+        StockfishEngine.Pv unknown = ReflectionHelpers.callConstructor(StockfishEngine.Pv.class,
+                from(List.class, Collections.singletonList("e2e4")),from(int.class,0),
+                from(boolean.class,false),from(boolean.class,false));
+        ReflectionHelpers.setField(service,"currentPvs",java.util.Arrays.asList(unknown,
+                new StockfishEngine.Pv("d2d4",Integer.MAX_VALUE,false),
+                new StockfishEngine.Pv("g1f3",-99995,true),
+                new StockfishEngine.Pv("c2c4",99995,true),
+                new StockfishEngine.Pv("b1c3",99998,true)));
+        BoardDetector.Board board = new BoardDetector.Board(10,100,320,1);
+        List<ArrowOverlayView.Arrow> arrows = rebuild(board);
+        assertEquals(0xFF00C853,arrows.get(4).color); // M2 beats M5 and finite scores.
+        assertEquals(0xFFFFB300,arrows.get(3).color);
+        assertEquals(0xFFFF6E8A,arrows.get(0).color); // Unknown is not an invented draw.
+        ReflectionHelpers.setField(service,"currentPvs",java.util.Arrays.asList(
+                new StockfishEngine.Pv("e2e4",-99998,true),new StockfishEngine.Pv("d2d4",-99995,true)));
+        assertEquals(0xFF00C853,rebuild(board).get(1).color); // Delaying a forced loss ranks higher.
+        ReflectionHelpers.setField(service,"currentPvs",java.util.Arrays.asList(
+                new StockfishEngine.Pv("e2e4",50,false),new StockfishEngine.Pv("d2d4",50,false)));
+        assertEquals(0xFF00C853,rebuild(board).get(0).color);
+        ReflectionHelpers.setField(service,"boardSide",Side.BLACK);
+        assertEquals(0xFF00C853,rebuild(board).get(0).color);
+    }
+
     @Test public void queuedResultsCannotPublishAcrossEditingPauseOrNewEpoch() {
         int[] published = {0};
         Runnable update = () -> published[0]++;
@@ -431,19 +481,20 @@ public class ScreenCaptureServiceTest {
         ReflectionHelpers.setField(service, "engine", new StockfishEngine() {
             @Override public synchronized List<Pv> analyze(String fen, int time, int elo, int choices, boolean studyLine) {
                 requested.add(choices);
-                return java.util.Arrays.asList(new Pv("e2e4", 20, false), new Pv("d2d4", 10, false), new Pv("g1f3", 5, false));
+                return java.util.Arrays.asList(new Pv("e2e4",20,false), new Pv("d2d4",10,false),
+                        new Pv("g1f3",5,false), new Pv("c2c4",3,false), new Pv("b1c3",1,false));
             }
         });
         char[][] initial = ReflectionHelpers.callInstanceMethod(service, "startingGridFor", from(Side.class, Side.WHITE));
         ReflectionHelpers.setField(service, "confirmedGrid", initial);
-        for (int choices : new int[]{1,3}) {
+        for (int choices : new int[]{1,3,5,4}) {
             com.opencheps.util.Prefs.setMultiPv(service, choices);
             ReflectionHelpers.callInstanceMethod(service, "queryEngineAndRender",
                     from(BoardDetector.Board.class, new BoardDetector.Board(0, 0, 320, 1)), from(Bitmap.class, null));
             List<?> arrows = ReflectionHelpers.getField(service, "currentArrows");
             assertEquals(choices, arrows.size());
         }
-        assertEquals(java.util.Arrays.asList(1,3), requested);
+        assertEquals(java.util.Arrays.asList(1,3,5,4), requested);
     }
 
     @Test public void thinkTimeAndContinuationChangesRequeryTheSamePosition() {

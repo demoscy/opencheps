@@ -93,7 +93,11 @@ public class PrefsTest {
         Context fresh = context.createConfigurationContext(context.getResources().getConfiguration());
         assertEquals(2, Prefs.multiPv(fresh));
         Prefs.setMultiPv(fresh, 20);
-        assertEquals(3, Prefs.multiPv(context));
+        assertEquals(5, Prefs.multiPv(context));
+        Prefs.setMultiPv(context,4);
+        assertEquals(4,Prefs.multiPv(fresh));
+        Prefs.setMultiPv(fresh,5);
+        assertEquals(5,Prefs.multiPv(context));
         Prefs.setMultiPv(fresh, 0);
         assertEquals(1, Prefs.multiPv(context));
         Prefs.get(context).edit().putString("multipv", "bad").commit();

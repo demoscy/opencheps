@@ -1014,7 +1014,7 @@ public class ScreenCaptureService extends Service {
             publish(() -> OverlayService.pushArrows(rendered, renderedBounds));
             StockfishEngine.Pv best = pvs.get(0);
             String evalStr = scoreText(best);
-            panelEval(formatUci(best.uci) + "  " + evalStr);
+            panelEval("★ " + formatUci(best.uci) + "  " + evalStr);
             refreshStudyLine();
             panelStatus(strength == 0 ? "Your move (" + dt + " ms)" : "Practice · " + strength + " Elo (approx.)");
         } catch (Exception e) {
@@ -1040,9 +1040,16 @@ public class ScreenCaptureService extends Service {
         Side persp = boardSide;
         BoardMapping mapping = mappingFor(board);
         float cellAvg = (mapping.width + mapping.height) / 16;
-        int[] colors = {0xFF00C853, 0xFFFFB300, 0xFF29B6F6};
-        float[] widths = {18f, 13f, 10f};
-        for (int i = 0; i < Math.min(Prefs.multiPv(this), pvs.size()); i++) {
+        int[] colors = {0xFF00C853, 0xFFFFB300, 0xFF29B6F6, 0xFFAB47BC, 0xFFFF6E8A};
+        float[] widths = {18f, 13f, 10f, 10f, 10f};
+        int count = Math.min(Prefs.multiPv(this), pvs.size());
+        List<Integer> ranked = new ArrayList<>();
+        for (int i = 0; i < count; i++) ranked.add(i);
+        ranked.sort((a, b) -> compareScores(pvs.get(b), pvs.get(a)));
+        int[] ranks = new int[count];
+        for (int rank = 0; rank < count; rank++) ranks[ranked.get(rank)] = rank;
+        // Color by score without changing the Elo-selected first move or its continuation.
+        for (int i = 0; i < count; i++) {
             String uci = pvs.get(i).uci;
             if (uci == null || uci.length() < 4) continue;
             int fx = uci.charAt(0) - 'a', fy = 8 - (uci.charAt(1) - '0');
@@ -1050,10 +1057,17 @@ public class ScreenCaptureService extends Service {
             float[] from = mapping.squareCenter(fx, fy, persp == Side.BLACK);
             float[] to = mapping.squareCenter(tx, ty, persp == Side.BLACK);
             String lbl = (i == 0 ? "★ " : "") + scoreText(pvs.get(i));
-            float width = Math.max(8f, widths[i] * Math.min(1.5f, cellAvg / 60f));
-            out.add(new ArrowOverlayView.Arrow(from[0], from[1], to[0], to[1], colors[i], width, lbl));
+            float width = Math.max(8f, widths[ranks[i]] * Math.min(1.5f, cellAvg / 60f));
+            out.add(new ArrowOverlayView.Arrow(from[0], from[1], to[0], to[1], colors[ranks[i]], width, lbl));
         }
         return out;
+    }
+
+    private static int compareScores(StockfishEngine.Pv a, StockfishEngine.Pv b) {
+        int categoryA = !a.hasScore ? -2 : a.mate ? a.cp > 0 ? 1 : -1 : 0;
+        int categoryB = !b.hasScore ? -2 : b.mate ? b.cp > 0 ? 1 : -1 : 0;
+        int comparison = Integer.compare(categoryA, categoryB);
+        return comparison != 0 ? comparison : a.hasScore ? Integer.compare(a.cp, b.cp) : 0;
     }
 
     private String fenOf(char[][] grid) {

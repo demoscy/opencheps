@@ -132,7 +132,23 @@ public class StockfishEngineTest {
                 + "bestmove f2f3\n");
         List<StockfishEngine.Pv> result = engine.analyze(fen, 500, 0, 99);
         assertEquals(2, result.size());
-        assertTrue(commands.toString().contains("MultiPV value 3"));
+        assertTrue(commands.toString().contains("MultiPV value 5"));
+    }
+
+    @Test public void fiveChoicesIncludeRanksFourAndFiveAndKeepTheHandicappedRootFirst() throws Exception {
+        String[] moves = {"f2f3","g2g3","h2h3","f2f4","g2g4"};
+        StringBuilder transcript = new StringBuilder("readyok\nreadyok\n");
+        for (int i=0; i<5; i++) transcript.append("info depth 8 multipv ").append(i+1)
+                .append(" score cp ").append(100-i*10).append(" pv ").append(moves[i]).append('\n');
+        transcript.append("bestmove g2g4\n");
+        StockfishEngine engine = engine(transcript.toString());
+        List<StockfishEngine.Pv> result = engine.analyze(fen,100,1800,5,false);
+        assertEquals(5,result.size());
+        assertEquals("g2g4",result.get(0).uci);
+        assertEquals(60,result.get(0).cp);
+        for (int i=1; i<5; i++) assertEquals(moves[i-1],result.get(i).uci);
+        assertTrue(commands.toString().contains("MultiPV value 5"));
+        assertFalse(commands.toString().contains("searchmoves"));
     }
 
     @Test public void fastSearchKeepsChosenMoveAndAlternativesWithoutSearchingForHiddenReplies() throws Exception {

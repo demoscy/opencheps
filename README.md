@@ -49,19 +49,23 @@ session is active. No new permissions or background service starts are needed.
 
 ## Study controls
 
-**Move choices** selects **one to three candidate arrows**, defaulting to three.
-Existing saved choice counts are honored. Green marks the selected move; amber
-and blue show distinct ranked alternatives when the position has enough moves.
+**Move choices** selects **one to five candidate arrows**, defaulting to three.
+Existing saved choice counts are honored. Colors rank the displayed scores:
+green (highest), amber, blue, purple and pink. The star **★** marks Stockfish's
+selected move, including the Elo-limited choice; it may have a different color.
+With one choice, that selected move is green. Fewer arrows appear when the engine
+returns fewer distinct legal moves. More choices share the same search budget and
+can reduce the depth reached for each candidate.
 
 Enable **Limit practice strength** and choose **1320–3190 Elo** to use Stockfish
 18's native `UCI_LimitStrength` / `UCI_Elo`. Disable it for full strength. This is
 Stockfish's approximate calibration scale, not a Chess.com rating, and is not
 human imitation or a concealment feature. Think time only controls search time;
 its former device-dependent Elo estimates are removed. Settings persist locally.
-The cap applies to the green selected move; other arrows are analysis alternatives.
+The cap applies to the ★ selected move; other arrows are analysis alternatives.
 
 **Show a 3-move study line** displays up to six half-moves (three for each side),
-with White/Black labels, following the green arrow. This is separate from the
+with White/Black labels, following the ★ selected move. This is separate from the
 number of candidate arrows and is not a prediction of actual replies. It can
 be shorter near mate/game end or if the
 search yields less. The strength cap applies to the selected next move; the rest
@@ -77,7 +81,7 @@ report is truncated. The strongest candidate never replaces the chosen move.
 
 For quicker suggestions, set **Think time** to **100–300 ms** and turn off
 **Show a 3-move study line**. Disabling the line skips its extra search entirely;
-one-to-three next-move choices remain available. Short searches may miss tactics
+one-to-five next-move choices remain available. Short searches may miss tactics
 and still produce strong moves. Think time is the engine's search budget, not
 total response time: capture, recognition, two matching frames and scheduling
 also add delay. Changing time or the line setting refreshes the same position.
@@ -85,10 +89,11 @@ also add delay. Changing time or the line setting refreshes the same position.
 Arrow chips show each candidate's own engine evaluation instead of its square
 coordinates, such as **+0.80**, **-1.25**, **M3** or **-M2**. Positive scores favor
 the selected analysis side; board orientation does not change this perspective.
-The star marks the selected green move, which can be weaker than alternatives
+The star marks the selected move, which can be weaker than alternatives
 when strength is limited. **—** means the engine supplied no score. Chip outlines
-match arrow colors; overlapping chips are shifted within the board when space
-allows. These scores are position evaluations, not move-quality classifications.
+match arrow colors. All lines and arrowheads are drawn before any score boxes;
+opaque box backgrounds keep later lines from obscuring a score. Overlapping chips
+are shifted within the board when space allows. These scores are position evaluations, not move-quality classifications.
 
 ## Manual board area
 

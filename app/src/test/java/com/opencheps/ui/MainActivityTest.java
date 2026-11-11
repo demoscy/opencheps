@@ -25,11 +25,15 @@ public class MainActivityTest {
             CheckBox limit = activity.findViewById(R.id.limitStrength);
             CheckBox line = activity.findViewById(R.id.showStudyLine);
             SeekBar choices = activity.findViewById(R.id.multiPvBar);
+            assertEquals(4,choices.getMax());
             assertEquals(2, choices.getProgress()); // Three choices by default.
             choices.setProgress(0);
             assertEquals(1, Prefs.multiPv(activity));
             choices.setProgress(2);
             assertEquals(3, Prefs.multiPv(activity));
+            choices.setProgress(4);
+            assertEquals(5,Prefs.multiPv(activity));
+            assertEquals("Move choices: 5",((TextView)activity.findViewById(R.id.multiPvLabel)).getText().toString());
             assertFalse(elo.isEnabled());
             limit.performClick();
             assertTrue(elo.isEnabled());
@@ -39,6 +43,16 @@ public class MainActivityTest {
             assertTrue(Prefs.showStudyLine(activity));
             assertTrue(((TextView) activity.findViewById(R.id.eloLabel)).getText().toString().contains("2320"));
             assertFalse(((TextView) activity.findViewById(R.id.thinkLabel)).getText().toString().toLowerCase().contains("elo"));
+        }
+    }
+    @Test public void fiveChoiceSettingSurvivesReopeningSettings() {
+        Prefs.get(RuntimeEnvironment.getApplication()).edit().clear().commit();
+        try (org.robolectric.android.controller.ActivityController<MainActivity> controller =
+                     Robolectric.buildActivity(MainActivity.class).setup()) {
+            ((SeekBar)controller.get().findViewById(R.id.multiPvBar)).setProgress(4);
+            controller.recreate();
+            assertEquals(4,((SeekBar)controller.get().findViewById(R.id.multiPvBar)).getProgress());
+            assertEquals(5,Prefs.multiPv(controller.get()));
         }
     }
     @Test public void fastestThinkTimeIsSelectableAndSurvivesReopeningSettings() {

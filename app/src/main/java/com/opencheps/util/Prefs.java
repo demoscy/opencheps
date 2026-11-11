@@ -12,6 +12,7 @@ public class Prefs {
     public  static final String KEY_THINK_MS  = "think_ms";
     public static final int MIN_THINK_MS = 100, MAX_THINK_MS = 3000, DEFAULT_THINK_MS = 1500;
     public static final String KEY_MULTIPV = "multipv";
+    public static final int MAX_MOVE_CHOICES = 5, DEFAULT_MOVE_CHOICES = 3;
     public static final int MIN_ELO = 1320, MAX_ELO = 3190, DEFAULT_ELO = 1800;
     private static final String KEY_LIMIT_STRENGTH = "limit_strength";
     private static final String KEY_PRACTICE_ELO = "practice_elo";
@@ -87,11 +88,12 @@ public class Prefs {
         get(c).edit().putInt(KEY_THINK_MS, clampThinkMs(time)).apply();
     }
     public static int multiPv(Context c) {
-        try { return Math.max(1, Math.min(3, get(c).getInt(KEY_MULTIPV, 3))); }
-        catch (ClassCastException e) { return 3; }
+        try { return clampMoveChoices(get(c).getInt(KEY_MULTIPV, DEFAULT_MOVE_CHOICES)); }
+        catch (ClassCastException e) { return DEFAULT_MOVE_CHOICES; }
     }
+    public static int clampMoveChoices(int choices) { return Math.max(1, Math.min(MAX_MOVE_CHOICES, choices)); }
     public static void setMultiPv(Context c, int choices) {
-        get(c).edit().putInt(KEY_MULTIPV, Math.max(1, Math.min(3, choices))).apply();
+        get(c).edit().putInt(KEY_MULTIPV, clampMoveChoices(choices)).apply();
     }
     public static int clampElo(int elo) { return Math.max(MIN_ELO, Math.min(MAX_ELO, elo)); }
     public static int practiceElo(Context c) {
