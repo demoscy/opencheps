@@ -243,7 +243,7 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-11: all 162 unit/Robolectric tests passed; both ARM debug APK
+Validation on 2026-11-11: all 169 unit/Robolectric tests passed; both ARM debug APK
 splits built; lint completed with zero errors and 44 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
@@ -355,3 +355,25 @@ real Stockfish 18: all four castles survive the UCI path when legal, both observ
 double steps yield en-passant suggestions, absent rights remove those legal moves,
 and castling through check / pinned en passant are rejected. Physical Android
 capture and the dropdown/window behavior still require phone acceptance testing.
+
+
+## Arrow visibility and notification permission
+
+Arrowheads are larger and wider, with a dark outline. Rendering order is all
+shafts, then all heads, then all evaluation chips. Thus a later shaft cannot paint
+over an earlier tip, while evaluations remain above every arrow. Heads scale with
+stroke/board size and cap their length for short moves. Evaluation chips now have
+a 5 px colored border and solid side stripe, with the existing opaque background,
+white score text, score ranking and five candidate colors.
+
+The optional `POST_NOTIFICATIONS` manifest declaration and runtime request were
+removed. The required MediaProjection foreground-service notification, channel,
+service type and immutable Stop PendingIntent remain. No screen-capture or overlay
+permission was removed. Android's own capture indicators remain controlled by
+Android.
+
+Phone acceptance: try five choices with crossing or collinear arrows on light
+and dark board squares. Verify enlarged tips, matching stripe/border colors and
+readable scores; repeat with one choice and Black below. Launch and reopen
+settings without a notification permission popup, start sharing, and test Pause,
+Resume and Stop. Physical-device behavior still needs confirmation.

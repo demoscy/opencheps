@@ -22,7 +22,6 @@ import android.view.View;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 
 import com.opencheps.R;
 import com.opencheps.capture.ScreenCaptureService;
@@ -156,10 +155,6 @@ public class MainActivity extends AppCompatActivity {
             btnStart.setEnabled(true);
         });
 
-        if (Build.VERSION.SDK_INT >= 33) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{ android.Manifest.permission.POST_NOTIFICATIONS }, 1);
-        }
     }
 
     private String thinkLabelText(int ms) { return getString(R.string.think_time, ms); }

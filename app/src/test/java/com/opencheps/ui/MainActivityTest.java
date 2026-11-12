@@ -108,4 +108,21 @@ public class MainActivityTest {
         }
         assertFalse(com.opencheps.capture.ScreenCaptureService.isRunning());
     }
+    @Test @Config(sdk = {26,33,34})
+    public void openingAndReopeningSettingsNeverRequestsNotificationPermission() throws Exception {
+        try (org.robolectric.android.controller.ActivityController<MainActivity> controller =
+                     Robolectric.buildActivity(MainActivity.class).setup()) {
+            for (int i=0;i<2;i++) {
+                MainActivity activity=controller.get();
+                assertNull(org.robolectric.Shadows.shadowOf(activity).getLastRequestedPermission());
+                String[] permissions=activity.getPackageManager().getPackageInfo(activity.getPackageName(),
+                        android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions;
+                java.util.List<String> requested=java.util.Arrays.asList(permissions);
+                assertFalse(requested.contains("android.permission.POST_NOTIFICATIONS"));
+                assertTrue(requested.contains("android.permission.FOREGROUND_SERVICE"));
+                assertTrue(requested.contains("android.permission.SYSTEM_ALERT_WINDOW"));
+                controller.recreate();
+            }
+        }
+    }
 }

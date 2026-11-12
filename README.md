@@ -106,10 +106,16 @@ Arrow chips show each candidate's own engine evaluation instead of its square
 coordinates, such as **+0.80**, **-1.25**, **M3** or **-M2**. Positive scores favor
 the selected analysis side; board orientation does not change this perspective.
 The star marks the selected move, which can be weaker than alternatives
-when strength is limited. **—** means the engine supplied no score. Chip outlines
-match arrow colors. All lines and arrowheads are drawn before any score boxes;
+when strength is limited. **—** means the engine supplied no score. Thicker chip
+outlines and solid side stripes match arrow colors. Larger arrowheads have dark
+outlines and are drawn above every shaft, so later crossing lines do not cover
+their tips. All arrowheads are drawn before any score boxes;
 opaque box backgrounds keep later lines from obscuring a score. Overlapping chips
 are shifted within the board when space allows. These scores are position evaluations, not move-quality classifications.
+
+OpenCheps does not request notification permission. Android still requires a
+foreground service for screen capture; its required service notification and
+system capture indicator are retained, including the Stop action where shown.
 
 ## Manual board area
 

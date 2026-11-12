@@ -732,4 +732,19 @@ public class ScreenCaptureServiceTest {
         } finally {overlay.destroy();}
     }
 
+    @Test @Config(sdk = {26,34})
+    public void foregroundCaptureRetainsItsRequiredNotificationAndStopActionWithoutNotificationPermission() {
+        assertEquals(android.content.pm.PackageManager.PERMISSION_DENIED,
+                service.checkSelfPermission("android.permission.POST_NOTIFICATIONS"));
+        ReflectionHelpers.callInstanceMethod(service,"startInForeground");
+        org.robolectric.shadows.ShadowService shadow=org.robolectric.Shadows.shadowOf(service);
+        android.app.Notification notification=shadow.getLastForegroundNotification();
+        assertNotNull(notification);
+        assertEquals(7,shadow.getLastForegroundNotificationId());
+        assertTrue((notification.flags & android.app.Notification.FLAG_ONGOING_EVENT)!=0);
+        assertNotNull(notification.actions[0].actionIntent);
+        if (android.os.Build.VERSION.SDK_INT >= 29) assertEquals(
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,service.getForegroundServiceType());
+    }
+
 }
