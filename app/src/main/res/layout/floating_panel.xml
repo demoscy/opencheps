@@ -141,6 +141,15 @@
                     android:layout_width="0dp"
                     android:layout_height="48dp"/>
             </LinearLayout>
+            <Button
+                android:id="@+id/panelSpecialMoves"
+                style="?android:attr/borderlessButtonStyle"
+                android:text="@string/special_moves"
+                android:textAllCaps="false"
+                android:textColor="#FFD3E8DA"
+                android:textSize="12sp"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"/>
             <TextView
                 android:id="@+id/panelEval"
                 android:textColor="#FFFFEB3B"

@@ -11,11 +11,17 @@ public class FenBuilder {
     }
 
     public static String build(char[][] grid, Side bootstrapSide, Side stm) {
+        return build(grid, bootstrapSide, stm, "-", "-");
+    }
+
+    public static String build(char[][] grid, Side bootstrapSide, Side stm, String castling, String enPassant) {
         char[][] g = bootstrapSide == Side.BLACK ? flip(grid) : grid;
 
         Validation v = validate(g);
         if (!v.ok) return null;
 
+        PositionRights checked = new PositionRights();
+        if (!checked.configure(g, stm, castling, enPassant)) return null;
         StringBuilder sb = new StringBuilder();
         for (int r = 0; r < 8; r++) {
             int run = 0;
@@ -28,7 +34,7 @@ public class FenBuilder {
             if (run > 0) sb.append(run);
             if (r < 7) sb.append('/');
         }
-        return sb.toString() + " " + (stm == Side.WHITE ? "w" : "b") + " - - 0 1";
+        return sb.toString() + " " + (stm == Side.WHITE ? "w" : "b") + " " + checked.castling() + " " + checked.enPassant() + " 0 1";
     }
 
     public static Validation validate(char[][] g) {

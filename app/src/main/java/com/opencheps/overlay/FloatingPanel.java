@@ -42,6 +42,7 @@ public class FloatingPanel {
         void onRecalibrate();
         void onSetBoardArea();
         void onCheckBoard();
+        default void onSpecialMoves() {}
         void onSideChange(Side newSide);
         void onTurnChange(Side side);
         void onFlipBoard();
@@ -105,6 +106,10 @@ public class FloatingPanel {
         });
         root.findViewById(R.id.panelBoardArea).setOnClickListener(v -> {
             if (listener != null) listener.onSetBoardArea();
+        });
+
+        root.findViewById(R.id.panelSpecialMoves).setOnClickListener(v -> {
+            if (listener != null) listener.onSpecialMoves();
         });
 
         // Match the arrow/editor origin; clamp the smaller window within the safe screen.

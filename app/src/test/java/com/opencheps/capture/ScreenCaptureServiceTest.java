@@ -630,4 +630,106 @@ public class ScreenCaptureServiceTest {
         }
     }
 
+    @Test public void observedOpeningRetainsCastlingInTheActualEngineFenForEitherBoardOrientation() {
+        for (Side bottom : Side.values()) {
+            ReflectionHelpers.callInstanceMethod(service,"resetGameState");
+            ReflectionHelpers.setField(service,"boardSide",bottom);
+            ReflectionHelpers.setField(service,"userSide",Side.WHITE);
+            List<String> queries = new ArrayList<>();
+            ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+                @Override public synchronized List<Pv> analyze(String fen,int time,int elo,int choices,boolean line) {
+                    queries.add(fen);
+                    return Collections.singletonList(new Pv("e1g1",30,false));
+                }
+            });
+            char[][] initial = ReflectionHelpers.callInstanceMethod(service,"startingGridFor",from(Side.class,Side.WHITE));
+            recognizeTwice(bottom == Side.BLACK ? com.opencheps.vision.FenBuilder.flip(initial) : initial,null);
+            char[][] after = copy(initial);
+            after[6][4]='.'; after[4][4]='P'; after[1][4]='.'; after[3][4]='p';
+            recognizeTwice(bottom == Side.BLACK ? com.opencheps.vision.FenBuilder.flip(after) : after,null);
+            assertEquals(2,queries.size());
+            assertTrue(queries.get(1).contains(" w KQkq - "));
+        }
+    }
+
+    @Test public void engineReceivesObservedEnPassantAndCaptureExpiresIt() {
+        char[][] before = {"....k...".toCharArray(),"...p....".toCharArray(),"........".toCharArray(),
+                "....P...".toCharArray(),"........".toCharArray(),"........".toCharArray(),
+                "........".toCharArray(),"....K...".toCharArray()};
+        ReflectionHelpers.setField(service,"observedStm",Side.BLACK);
+        ReflectionHelpers.setField(service,"turnExplicit",true);
+        List<String> queries = new ArrayList<>();
+        ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+            @Override public synchronized List<Pv> analyze(String fen,int time,int elo,int choices,boolean line) {
+                queries.add(fen); return Collections.singletonList(new Pv("e5d6",20,false));
+            }
+        });
+        recognizeTwice(before,null);
+        char[][] after = copy(before); after[1][3]='.'; after[3][3]='p';
+        recognizeTwice(after,null);
+        assertEquals(1,queries.size());
+        assertTrue(queries.get(0).contains(" w - d6 "));
+        assertEquals(Side.WHITE,ReflectionHelpers.getField(service,"observedStm"));
+        char[][] captured = copy(after); captured[3][4]=captured[3][3]='.'; captured[2][3]='P';
+        recognizeTwice(captured,null);
+        assertEquals(Side.BLACK,ReflectionHelpers.getField(service,"observedStm"));
+        com.opencheps.vision.PositionRights rights = ReflectionHelpers.getField(service,"positionRights");
+        assertEquals("-",rights.enPassant());
+    }
+
+    @Test public void specialMovesEditorPausesAndCancelKeepsRightsTurnAndNormalPause() {
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        org.robolectric.android.controller.ServiceController<com.opencheps.overlay.OverlayService> overlay =
+                Robolectric.buildService(com.opencheps.overlay.OverlayService.class).create();
+        try {
+            ReflectionHelpers.setField(service,"worker",new Handler(Looper.getMainLooper()));
+            char[][] board = ReflectionHelpers.callInstanceMethod(service,"startingGridFor",from(Side.class,Side.WHITE));
+            ReflectionHelpers.setField(service,"confirmedGrid",board);
+            com.opencheps.vision.PositionRights rights = ReflectionHelpers.getField(service,"positionRights");
+            rights.synchronize(board,Side.WHITE);
+            ReflectionHelpers.setField(service,"paused",true);
+            ReflectionHelpers.callInstanceMethod(service,"beginSpecialMoves");
+            ShadowLooper.idleMainLooper();
+            assertTrue(ReflectionHelpers.getField(service,"editing"));
+            assertNotNull(ReflectionHelpers.getField(overlay.get(),"specialMoves"));
+            AtomicInteger epoch = ReflectionHelpers.getField(service,"epoch");
+            assertFalse(ReflectionHelpers.callInstanceMethod(service,"canCapture",from(int.class,epoch.get())));
+            com.opencheps.overlay.OverlayService.cancelCalibration();
+            org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+            assertFalse(ReflectionHelpers.getField(service,"editing"));
+            assertTrue(ReflectionHelpers.getField(service,"paused"));
+            assertEquals(Side.WHITE,ReflectionHelpers.getField(service,"observedStm"));
+            assertEquals("KQkq",rights.castling());
+        } finally { overlay.destroy(); }
+    }
+
+    @Test public void savingMidgameRightsReanalyzesTheUnchangedBoardAndReadRetainsThem() {
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        org.robolectric.android.controller.ServiceController<com.opencheps.overlay.OverlayService> overlay =
+                Robolectric.buildService(com.opencheps.overlay.OverlayService.class).create();
+        try {
+            ReflectionHelpers.setField(service,"worker",new Handler(Looper.getMainLooper()));
+            List<String> queries=new ArrayList<>();
+            ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+                @Override public synchronized List<Pv> analyze(String fen,int time,int elo,int choices,boolean line) {
+                    queries.add(fen);return Collections.singletonList(new Pv("e1g1",30,false));
+                }
+            });
+            char[][] board={"r...k..r".toCharArray(),"........".toCharArray(),"........".toCharArray(),"........".toCharArray(),
+                    "........".toCharArray(),"........".toCharArray(),"........".toCharArray(),"R...K..R".toCharArray()};
+            recognizeTwice(board,null);
+            assertTrue(queries.get(0).contains(" w - - "));
+            ReflectionHelpers.callInstanceMethod(service,"beginSpecialMoves");
+            ShadowLooper.idleMainLooper();
+            ReflectionHelpers.callInstanceMethod(overlay.get(),"finishSpecialMoves",from(String.class,"KQkq"),from(String.class,"-"));
+            org.robolectric.Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(300));
+            assertFalse(ReflectionHelpers.getField(service,"editing"));
+            recognizeTwice(board,null);
+            assertEquals(2,queries.size());assertTrue(queries.get(1).contains(" w KQkq - "));
+            ReflectionHelpers.callInstanceMethod(service,"resetGameState");
+            recognizeTwice(board,null);
+            assertTrue(queries.get(2).contains(" w KQkq - "));
+        } finally {overlay.destroy();}
+    }
+
 }

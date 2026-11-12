@@ -197,8 +197,17 @@ an offset. Hidden shared content clears arrows and waits until visible again.
 
 ## Limits
 
-Castling rights and en-passant history cannot be recovered from a still image;
-the existing FEN builder uses `-` for both. Incorrect turn selection, unsupported
+Castling rights and en-passant history cannot be recovered from a still image.
+They are now tracked from observed moves: the standard starting position grants
+`KQkq`, home king/rook movement or rook capture revokes rights, and a pawn double
+step sets an en-passant target for one reply when a capture is possible. A fresh
+mid-game position defaults to no known rights. **Special moves** allows explicit
+confirmation for that position, with home-piece/target validation. Stockfish
+still rejects castling through check or blocked paths and en passant exposing
+the king. Rights stay in capture-session memory; they are not persisted across
+unrelated games. Re-reading/rotating the same canonical position preserves them;
+a different re-read position discards them. Missed history, including a king or
+rook leaving and returning while unseen, cannot be inferred from identical pixels. Incorrect turn selection, unsupported
 themes, animation, capture scaling or a wrong crop can still prevent or mislead
 analysis. Moving to an unrelated puzzle/history position can require **Read current
 position** and Turn selection. This is not automatic move-history reconstruction.
@@ -234,7 +243,7 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-11: all 142 unit/Robolectric tests passed; both ARM debug APK
+Validation on 2026-11-11: all 162 unit/Robolectric tests passed; both ARM debug APK
 splits built; lint completed with zero errors and 44 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
@@ -311,3 +320,38 @@ check that every score box stays above lines and retains its matching border.
 Verify that green has the highest displayed score. Keep Elo limiting on and check
 that ★, the panel move and Selected continuation still follow the chosen move,
 including after switching back to one choice.
+
+
+## Special-move acceptance checks
+
+The FEN builder previously hardcoded `- -`, which made castling/en-passant
+suggestions impossible even when the image transition was recognized. The capture
+service now passes session rights into every engine FEN and its analysis cache.
+The new **Special moves** screen uses the same detach/remove/250 ms grace flow as
+calibration. Save invalidates analysis without resetting turn, orientation or
+normal Pause; Cancel and rotation do not change the rights. No new permissions,
+network services or workflow changes were added.
+
+On a browser study/practice board:
+
+1. Start at the standard initial position. After opening moves clear the king's
+   path, check **Special moves**: relevant castling rights remain checked. A
+   castle may be suggested when legal and among the engine's displayed choices;
+   availability does not force the engine to prefer it.
+2. Make O-O and O-O-O in separate test positions, for White and Black; repeat
+   with Black below. Tracking should accept the four-square change and continue.
+3. Move a king/rook away and back; its right must stay unchecked. Capture a home
+   rook; its right must also disappear.
+4. With White pawn e5 and Black pawn d7, observe ...d5. White can receive e5d6
+   en passant. A different White reply expires d6. Repeat with Black pawn d4,
+   White pawn e2 and e4 to make d4e3 available to Black.
+5. Open a mid-game castling/en-passant position directly. Set **Turn** correctly,
+   open **Special moves**, confirm the known rights/target, Save and verify the
+   suggestions refresh without moving a piece. Try Cancel, rotation, Pause and
+   Stop while editing. Settings must not be applied to a different position.
+
+Desktop verification also uses the production FEN builder and UCI adapter against
+real Stockfish 18: all four castles survive the UCI path when legal, both observed
+double steps yield en-passant suggestions, absent rights remove those legal moves,
+and castling through check / pinned en passant are rejected. Physical Android
+capture and the dropdown/window behavior still require phone acceptance testing.

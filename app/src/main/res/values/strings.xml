@@ -54,4 +54,14 @@ Match the grid to the exact 8×8 board.</string>
     <string name="panel_pause">Pause analysis</string>
     <string name="panel_resume">Resume analysis</string>
     <string name="status_starting">Starting…</string>
+    <string name="special_moves">Special moves</string>
+    <string name="special_moves_help">Castling needs a king and rook that have never moved. Confirm these rights only if you know the game history. Blocked paths or check may still prevent castling. Opening a position mid-game leaves its rights unknown until confirmed here. These settings apply to this capture session only.</string>
+    <string name="castle_white_king">White can castle O-O</string>
+    <string name="castle_white_queen">White can castle O-O-O</string>
+    <string name="castle_black_king">Black can castle O-O</string>
+    <string name="castle_black_queen">Black can castle O-O-O</string>
+    <string name="en_passant_help">En passant: choose the square the capturing pawn would land on, only if the opponent’s immediately preceding move was the adjacent pawn’s double step. “-” means none. Targets shown fit the current pieces; Stockfish checks king safety.</string>
+    <string name="en_passant_target">En passant target square</string>
+    <string name="special_save">Save</string>
+    <string name="special_cancel">Cancel</string>
 </resources>

@@ -177,4 +177,26 @@ public class OverlayServiceTest {
         assertNull(OverlayService.panel());
     }
 
+    @Test public void specialMoveControlsCancelOnceOnRotationAndCannotOverlapOtherEditors() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller=Robolectric.buildService(OverlayService.class).create();
+        char[][] board={"r...k..r".toCharArray(),"........".toCharArray(),"........".toCharArray(),"........".toCharArray(),
+                "........".toCharArray(),"........".toCharArray(),"........".toCharArray(),"R...K..R".toCharArray()};
+        int[] closed={0};
+        OverlayService.suspendForCalibration();
+        OverlayService.showSpecialMoves(board,com.opencheps.util.Side.WHITE,"KQkq","-",(rights,ep)->{
+            assertNull(rights); assertNull(ep); closed[0]++;
+        });
+        assertNotNull(ReflectionHelpers.getField(controller.get(),"specialMoves"));
+        int[] other={0};
+        OverlayService.showCalibration(1080,2340,0,new Rect(40,400,1040,1400),(changed,area)->{
+            assertFalse(changed); other[0]++;
+        });
+        assertEquals(1,other[0]);
+        controller.get().onConfigurationChanged(new Configuration());
+        OverlayService.cancelCalibration();
+        assertEquals(1,closed[0]);
+        assertNull(ReflectionHelpers.getField(controller.get(),"specialMoves"));
+        OverlayService.resumeAfterCalibration();
+    }
 }

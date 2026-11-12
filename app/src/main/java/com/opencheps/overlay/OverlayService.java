@@ -21,6 +21,8 @@ import android.view.WindowInsets;
 import androidx.annotation.Nullable;
 
 import com.opencheps.util.BoardArea;
+import com.opencheps.util.Side;
+import java.util.function.BiConsumer;
 
 import java.util.List;
 
@@ -35,6 +37,8 @@ public class OverlayService extends Service {
     private CalibrationOverlay calibration;
     private BoardPreviewOverlay preview;
     private Runnable previewClosed;
+    private SpecialMovesOverlay specialMoves;
+    private BiConsumer<String, String> specialMovesClosed;
     private CalibrationListener calibrationListener;
     private boolean suspended;
     private boolean capturing;
@@ -71,7 +75,7 @@ public class OverlayService extends Service {
     public static void showCalibration(int width, int height, int rotation, Rect initial,
                                        CalibrationListener listener) {
         OverlayService s = instance;
-        if (s == null || !Settings.canDrawOverlays(s) || s.calibration != null || s.preview != null) {
+        if (s == null || !Settings.canDrawOverlays(s) || s.calibration != null || s.preview != null || s.specialMoves != null) {
             listener.onFinished(false, null);
             return;
         }
@@ -92,7 +96,7 @@ public class OverlayService extends Service {
     /** Takes ownership of a memory-only copy; the caller has detached capture first. */
     public static void showBoardPreview(Bitmap bitmap, String details, Runnable closed) {
         OverlayService service = instance;
-        if (service == null || !Settings.canDrawOverlays(service) || service.preview != null || service.calibration != null) {
+        if (service == null || !Settings.canDrawOverlays(service) || service.preview != null || service.calibration != null || service.specialMoves != null) {
             if (bitmap != null) bitmap.recycle();
             closed.run();
             return;
@@ -104,6 +108,35 @@ public class OverlayService extends Service {
             Log.e(TAG, "Could not show captured-board preview", e);
             service.finishPreview();
         }
+    }
+
+    /** Null metadata on close means CANCEL; capture must already be detached. */
+    public static void showSpecialMoves(char[][] board, Side turn, String rights, String target,
+                                       BiConsumer<String, String> closed) {
+        OverlayService service = instance;
+        if (service == null || !Settings.canDrawOverlays(service) || service.specialMoves != null
+                || service.preview != null || service.calibration != null) {
+            closed.accept(null, null);
+            return;
+        }
+        service.specialMovesClosed = closed;
+        service.specialMoves = new SpecialMovesOverlay(service, board, turn, rights, target,
+                service::finishSpecialMoves, () -> service.finishSpecialMoves(null, null));
+        try { service.wm.addView(service.specialMoves, OverlayWindow.fullScreen(true)); }
+        catch (RuntimeException e) {
+            Log.e(TAG, "Could not show special-move controls", e);
+            service.finishSpecialMoves(null, null);
+        }
+    }
+
+    private void finishSpecialMoves(String rights, String target) {
+        if (specialMoves != null) {
+            try { wm.removeViewImmediate(specialMoves); } catch (RuntimeException ignored) {}
+            specialMoves = null;
+        }
+        BiConsumer<String, String> closed = specialMovesClosed;
+        specialMovesClosed = null;
+        if (closed != null) closed.accept(rights, target);
     }
 
     private void finishPreview() {
@@ -194,6 +227,7 @@ public class OverlayService extends Service {
 
     public static void cancelCalibration() {
         if (instance != null) {
+            instance.finishSpecialMoves(null, null);
             instance.finishPreview();
             instance.finishCalibration(false, null);
         }
@@ -201,6 +235,7 @@ public class OverlayService extends Service {
 
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
+        finishSpecialMoves(null, null);
         finishPreview();
         finishCalibration(false, null);
         android.util.DisplayMetrics display = new android.util.DisplayMetrics();
@@ -210,6 +245,7 @@ public class OverlayService extends Service {
 
     @Override public void onDestroy() {
         instance = null;
+        finishSpecialMoves(null, null);
         finishPreview();
         finishCalibration(false, null);
         try { if (arrows != null) wm.removeView(arrows); } catch (Exception ignored) {}

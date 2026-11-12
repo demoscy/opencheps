@@ -46,6 +46,7 @@ import com.opencheps.util.StudyLine;
 import com.opencheps.vision.BoardDetector;
 import com.opencheps.vision.BoardFrameChange;
 import com.opencheps.vision.FenBuilder;
+import com.opencheps.vision.PositionRights;
 import com.opencheps.vision.MoveAnalyzer;
 import com.opencheps.vision.PieceClassifier;
 
@@ -107,6 +108,7 @@ public class ScreenCaptureService extends Service {
     private boolean turnExplicit;
     private List<BoardArea> manualAreas = new ArrayList<>();
 
+    private final PositionRights positionRights = new PositionRights();
     private char[][] confirmedGrid;
     private char[][] candidateGrid;
     private int candidateRepeats;
@@ -119,6 +121,7 @@ public class ScreenCaptureService extends Service {
     private String lastReadDetails = "Waiting for a captured board";
     private long lastPreviewAt;
     private boolean previewEditing;
+    private boolean specialEditing;
     private ReadAttempt lastReadAttempt;
     private String lastDisplayedArrowFen = "";
     private BoardDetector.Board lastKnownBoard;
@@ -330,6 +333,7 @@ public class ScreenCaptureService extends Service {
             @Override public void onStop() { stopSelf(); }
             @Override public void onSetBoardArea() { beginCalibration(); }
             @Override public void onCheckBoard() { beginBoardPreview(); }
+            @Override public void onSpecialMoves() { beginSpecialMoves(); }
             @Override public void onRecalibrate() {
                 epoch.incrementAndGet();
                 OverlayService.clearAll();
@@ -378,6 +382,55 @@ public class ScreenCaptureService extends Service {
                     panelStatus("Reading current position · you play " + newSide);
                 });
             }
+        });
+    }
+
+    private char[][] canonical(char[][] grid) {
+        return boardSide == Side.BLACK ? FenBuilder.flip(grid) : grid;
+    }
+
+    private void beginSpecialMoves() {
+        if (editing || settingsVisible || stopping || worker == null) return;
+        editing = true;
+        specialEditing = true;
+        int expected = epoch.incrementAndGet();
+        OverlayService.suspendForCalibration();
+        worker.post(() -> {
+            if (stopping) return;
+            try {
+                if (virtualDisplay != null) virtualDisplay.setSurface(null);
+                drainReader();
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Could not suspend capture for special moves", e);
+                main.post(this::stopSelf);
+                return;
+            }
+            if (confirmedGrid == null) {
+                main.post(() -> {
+                    finishCalibration(false, null);
+                    android.widget.Toast.makeText(this, "Read a clear board first", android.widget.Toast.LENGTH_SHORT).show();
+                });
+                return;
+            }
+            char[][] board = canonical(confirmedGrid);
+            Side turn = observedStm;
+            positionRights.synchronize(board, turn);
+            String rights = positionRights.castling(), target = positionRights.enPassant();
+            main.post(() -> {
+                if (stopping || !editing || settingsVisible || epoch.get() != expected) {
+                    if (!stopping && editing) finishCalibration(false, null);
+                    return;
+                }
+                OverlayService.showSpecialMoves(board, turn, rights, target, (savedRights, savedTarget) -> {
+                    if (savedRights == null) finishCalibration(false, null);
+                    else worker.post(() -> {
+                        if (stopping || !editing || epoch.get() != expected) return;
+                        positionRights.configure(board, turn, savedRights, savedTarget);
+                        invalidateAnalysis();
+                        main.post(() -> finishCalibration(false, null));
+                    });
+                });
+            });
         });
     }
 
@@ -491,8 +544,8 @@ public class ScreenCaptureService extends Service {
     private void finishCalibration(boolean changed, BoardArea area) {
         if (stopping || !editing) return;
         if (changed) Prefs.setBoardArea(this, area);
-        boolean wasPreview = previewEditing;
-        previewEditing = false;
+        boolean wasPreview = previewEditing, wasSpecial = specialEditing;
+        previewEditing = specialEditing = false;
         epoch.incrementAndGet();
         // removeViewImmediate has run; allow the compositor to remove the editor before reattaching.
         main.postDelayed(() -> {
@@ -521,7 +574,7 @@ public class ScreenCaptureService extends Service {
                             panel.setEval("");
                             panel.setStatus(paused ? "Paused" : changed
                                     ? (area == null ? "Auto board detection" : "Manual board area saved")
-                                    : wasPreview ? "Board check closed" : "Calibration cancelled");
+                                    : wasSpecial ? "Special moves closed" : wasPreview ? "Board check closed" : "Calibration cancelled");
                         }
                     });
                 } catch (RuntimeException e) {
@@ -912,6 +965,7 @@ public class ScreenCaptureService extends Service {
         if (confirmedGrid == null) {
             confirmedGrid = grid;
             if (!turnExplicit && gridsEqual(grid, startingGridFor(boardSide))) observedStm = Side.WHITE;
+            positionRights.synchronize(canonical(grid), observedStm);
             candidateGrid = null;
             candidateRepeats = 0;
             updatePositionControls();
@@ -920,7 +974,7 @@ public class ScreenCaptureService extends Service {
             return;
         }
 
-        MoveAnalyzer.Result m = MoveAnalyzer.analyze(confirmedGrid, grid, observedStm);
+        MoveAnalyzer.Result m = MoveAnalyzer.analyze(canonical(confirmedGrid), canonical(grid), observedStm);
         if (m.kind == MoveAnalyzer.Kind.UNKNOWN || m.mover == null) {
             // A new puzzle/history jump has no recoverable turn. Require the visible Turn
             // control or Read current position instead of silently forcing the user's turn.
@@ -937,6 +991,7 @@ public class ScreenCaptureService extends Service {
 
         confirmedGrid = grid;
         observedStm = m.mover == Side.WHITE ? Side.BLACK : Side.WHITE;
+        positionRights.advance(canonical(grid), observedStm, m);
         updatePositionControls();
         candidateGrid = null;
         candidateRepeats = 0;
@@ -978,8 +1033,8 @@ public class ScreenCaptureService extends Service {
             panelStatus("Invalid: " + v.reason);
             return;
         }
-        String fen = FenBuilder.build(confirmedGrid, boardSide, userSide);
-        if (fen == null) { panelStatus("FEN build failed"); return; }
+        String fen = fenOf(confirmedGrid);
+        if (fen.isEmpty()) { panelStatus("FEN build failed"); return; }
         int strength = Prefs.strengthElo(getApplicationContext());
         int choices = Prefs.multiPv(getApplicationContext());
         int think = Prefs.thinkMs(getApplicationContext());
@@ -1072,7 +1127,9 @@ public class ScreenCaptureService extends Service {
 
     private String fenOf(char[][] grid) {
         if (grid == null) return "";
-        String f = FenBuilder.build(grid, boardSide, userSide);
+        positionRights.synchronize(canonical(grid), observedStm);
+        String f = FenBuilder.build(grid, boardSide, userSide,
+                positionRights.castling(), positionRights.enPassant());
         return f == null ? "" : f;
     }
 

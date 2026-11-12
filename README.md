@@ -23,8 +23,24 @@ Recognition confidence and sanity checks cannot guarantee correct analysis.
 - **Pause / Resume / Stop** retain their existing functions.
 
 A still image cannot reliably provide turn, castling rights or en-passant history.
-The existing FEN builder supplies no castling/en-passant rights. An unrelated
-puzzle/history jump can require Read current position and Turn selection.
+OpenCheps now tracks special-move rights during observed play. Recognizing the
+standard starting position initializes all four castling rights. Moving a king or
+rook, or capturing a home rook, removes the relevant rights permanently. An
+observed pawn double step enables en passant for the next reply when a capture
+is possible; any subsequent move expires it. Stockfish checks path clearance,
+check and king safety before suggesting either special move.
+
+For a puzzle or position opened mid-game, tap **Special moves** in the expanded
+panel. Confirm only the castling rights you know from the game history. Select an
+en-passant target only if the opponent's immediately preceding move was that
+pawn's double step; the target is the square your pawn would land on. Missing home
+kings/rooks and impossible en-passant targets cannot be enabled. **Save** updates
+analysis; **Cancel** discards edits. Capture pauses while this screen is open.
+Rights are session-only, not a global setting shared between unrelated games.
+Re-reading the exact same canonical position retains its rights; an unrelated
+puzzle/history jump starts with unknown rights and can require **Read current
+position**, **Turn**, and confirmation in **Special moves**. An unseen history or
+king/rook round trip cannot be reconstructed from identical pixels.
 
 ## Compact controls and settings
 
