@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.util.Log;
 import com.opencheps.util.Prefs;
+import com.opencheps.util.PositionEvaluation;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -131,8 +132,22 @@ public class StockfishEngine {
         return choicesFound;
     }
 
+    /** Evaluate the current root position at full strength on either side's turn. */
+    public synchronized PositionEvaluation evaluate(String fen, int movetimeMs) throws Exception {
+        if (!ready) throw new IllegalStateException("engine not started");
+        setMultiPv(1);
+        setStrength(0);
+        send("ucinewgame");
+        // Avoid truncated mate variations inherited from an earlier position's hash entries.
+        send("setoption name Clear Hash");
+        send("isready");
+        waitFor("readyok", 6000);
+        return search(fen, Prefs.clampThinkMs(movetimeMs), null).evaluation;
+    }
+
     private static class Search {
         String move;
+        PositionEvaluation evaluation;
         final Map<String, Pv> lines = new HashMap<>();
         final Map<Integer, String> ranking = new TreeMap<>();
     }
@@ -151,6 +166,13 @@ public class StockfishEngine {
                     throw new IllegalStateException("Invalid engine bestmove");
                 return result;
             }
+            PositionEvaluation evaluation = parseEvaluation(line);
+            if (evaluation != null) {
+                PositionEvaluation previous = result.evaluation;
+                // Retain a complete mate line when the same score is later reported with a short PV.
+                if (previous == null || !evaluation.mate || !previous.mate || previous.cp != evaluation.cp
+                        || evaluation.moves.size() >= previous.moves.size()) result.evaluation = evaluation;
+            }
             Pv pv = parsePv(line);
             if (pv != null) {
                 int rank = 1;
@@ -166,6 +188,36 @@ public class StockfishEngine {
                     result.lines.put(pv.uci, pv);
             }
         }
+    }
+
+    static PositionEvaluation parseEvaluation(String line) {
+        if (!line.startsWith("info ") || line.startsWith("info string ")) return null;
+        String[] tokens = line.trim().split("\\s+");
+        Integer cp = null;
+        boolean mate = false;
+        List<String> moves = new ArrayList<>();
+        for (int i = 1; i < tokens.length; i++) {
+            if ("lowerbound".equals(tokens[i]) || "upperbound".equals(tokens[i])) return null;
+            if ("multipv".equals(tokens[i]) && i+1 < tokens.length && !"1".equals(tokens[i+1])) return null;
+            if ("score".equals(tokens[i]) && i+2 < tokens.length) {
+                try {
+                    int value = Integer.parseInt(tokens[i+2]);
+                    if ("cp".equals(tokens[i+1])) { cp = value; mate = false; }
+                    else if ("mate".equals(tokens[i+1]) && Math.abs((long)value) < 100000) {
+                        mate = true;
+                        cp = value > 0 ? 100000-value : -100000-value;
+                    } else return null;
+                } catch (NumberFormatException e) { return null; }
+            }
+            if ("pv".equals(tokens[i])) {
+                for (int j = i+1; j < tokens.length; j++) {
+                    if (!isMove(tokens[j])) return null;
+                    if (moves.size() < PositionEvaluation.MAX_LINE_PLIES) moves.add(tokens[j]);
+                }
+                break;
+            }
+        }
+        return cp == null ? null : new PositionEvaluation(cp, mate, moves);
     }
 
     static Pv parsePv(String line) {

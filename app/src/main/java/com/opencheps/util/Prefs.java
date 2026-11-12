@@ -18,6 +18,24 @@ public class Prefs {
     private static final String KEY_PRACTICE_ELO = "practice_elo";
     private static final String KEY_STUDY_LINE = "show_study_line";
 
+    private static final String KEY_EVALUATION_ONLY = "evaluation_only";
+    private static final String KEY_MATE_LINE = "show_mate_line";
+
+    public static boolean evaluationOnly(Context c) {
+        try { return get(c).getBoolean(KEY_EVALUATION_ONLY, false); }
+        catch (ClassCastException e) { return false; }
+    }
+    public static void setEvaluationOnly(Context c, boolean enabled) {
+        get(c).edit().putBoolean(KEY_EVALUATION_ONLY, enabled).apply();
+    }
+    public static boolean showMateLine(Context c) {
+        try { return get(c).getBoolean(KEY_MATE_LINE, false); }
+        catch (ClassCastException e) { return false; }
+    }
+    public static void setShowMateLine(Context c, boolean enabled) {
+        get(c).edit().putBoolean(KEY_MATE_LINE, enabled).apply();
+    }
+
     private static final String KEY_BOARD_AREA = "manual_board_area_v1";
 
     public static SharedPreferences get(Context c) {

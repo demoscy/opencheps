@@ -186,4 +186,38 @@ public class StockfishEngineTest {
         assertEquals(6, result.moves.size());
         assertTrue(commands.toString().contains("go movetime 100 searchmoves g2g3\n"));
     }
+    @Test public void positionEvaluationUsesFullStrengthSinglePvAndTheActualFen() throws Exception {
+        StockfishEngine engine=engine("readyok\nreadyok\ninfo depth 14 score cp -85 pv g8f8 g1f1\nbestmove g8f8\n");
+        com.opencheps.util.PositionEvaluation evaluation=engine.evaluate(fen.replace(" w "," b "),100);
+        assertNotNull(evaluation);assertEquals(-85,evaluation.cp);
+        assertTrue(commands.toString().contains("MultiPV value 1"));
+        assertTrue(commands.toString().contains("UCI_LimitStrength value false"));
+        assertTrue(commands.toString().contains(" b - - "));
+        assertFalse(commands.toString().contains("searchmoves"));
+    }
+    @Test public void terminalMateAndStalemateAreScoresEvenWithoutALegalMoveOrPv() throws Exception {
+        StockfishEngine mate=engine("readyok\nreadyok\ninfo depth 0 score mate 0\nbestmove (none)\n");
+        assertEquals(-100000,mate.evaluate(fen,100).cp);
+        StockfishEngine draw=engine("readyok\nreadyok\ninfo depth 0 score cp 0\nbestmove 0000\n");
+        assertEquals(0,draw.evaluate(fen,100).cp);
+    }
+    @Test public void evaluationRejectsBoundsMalformedDataAndMissingScores() throws Exception {
+        assertNull(StockfishEngine.parseEvaluation("info depth 10 score cp 500 lowerbound pv e2e4"));
+        assertNull(StockfishEngine.parseEvaluation("info multipv 2 score mate 2 pv e2e4"));
+        assertNull(StockfishEngine.parseEvaluation("info string score cp 500 pv e2e4"));
+        assertNull(StockfishEngine.parseEvaluation("info score cp nope pv e2e4"));
+        assertNull(StockfishEngine.parseEvaluation("info score cp 20 pv e2e4 nope"));
+        assertNull(StockfishEngine.parseEvaluation("info depth 10 nodes 500"));
+        assertNull(engine("readyok\nreadyok\nbestmove e2e4\n").evaluate(fen,100));
+    }
+    @Test public void evaluationKeepsFullMateLinesBeyondTheArrowStudyLimit() throws Exception {
+        String pv="a7a8q h8h7 a8a7 h7h6 a7a6 h6h5 a6a5";
+        StockfishEngine engine=engine("readyok\nreadyok\ninfo depth 16 score mate 4 pv "+pv
+                +"\ninfo depth 17 score mate 4 pv a7a8q\nbestmove a7a8q\n");
+        com.opencheps.util.PositionEvaluation evaluation=engine.evaluate(fen,100);
+        assertEquals(7,evaluation.moves.size());assertTrue(evaluation.completeMateLine());
+        assertEquals(6,StockfishEngine.parsePv("info score mate 4 pv "+pv).moves.size());
+        String longLine=String.join(" ",java.util.Collections.nCopies(200,"a1a2"));
+        assertEquals(128,StockfishEngine.parseEvaluation("info score mate 100 pv "+longLine).moves.size());
+    }
 }

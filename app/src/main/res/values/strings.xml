@@ -64,4 +64,15 @@ Match the grid to the exact 8×8 board.</string>
     <string name="en_passant_target">En passant target square</string>
     <string name="special_save">Save</string>
     <string name="special_cancel">Cancel</string>
+    <string name="evaluation_only">Evaluation only — no arrows</string>
+    <string name="evaluation_only_help">Scores the board currently on screen after either side moves. Positive favors the selected color; negative favors the opponent. This mode uses full strength and ignores practice Elo and move choices. It evaluates the position, not the quality of your last move.</string>
+    <string name="show_mate_line">Show mate line when found</string>
+    <string name="mate_line_help">Optional text only. Stockfish seeks the shortest forced mate it finds within your think time, against best defense. A short search may miss a faster mate or return a partial line.</string>
+    <string name="mate_line_show">Show mate line</string>
+    <string name="mate_line_hide">Hide mate line</string>
+    <string name="mate_line">Mate line (shortest found): %1$s</string>
+    <string name="mate_line_partial">Mate line (partial): %1$s</string>
+    <string name="position_score_description">Position score for %1$s: %2$s</string>
+    <string name="position_score_unavailable">Position score unavailable</string>
+    <string name="side_help">In arrow mode, choose the side to analyze. In evaluation-only mode, choose the color favored by a positive score. Turn and board orientation are separate controls in the floating panel.</string>
 </resources>

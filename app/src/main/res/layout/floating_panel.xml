@@ -22,13 +22,18 @@
             android:contentDescription="@string/panel_minimize"
             android:layout_width="48dp"
             android:layout_height="48dp"/>
-        <ImageButton
-            android:id="@+id/panelColor"
-            android:src="@drawable/ic_side_white"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:padding="10dp"
-            android:contentDescription="@string/panel_color_white"
-            android:layout_width="48dp"
+        <TextView
+            android:id="@+id/panelCompactScore"
+            android:text="—"
+            android:contentDescription="@string/position_score_unavailable"
+            android:textColor="#FFFFFFFF"
+            android:fontFamily="monospace"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textSize="18sp"
+            android:ellipsize="end"
+            android:visibility="gone"
+            android:layout_width="80dp"
             android:layout_height="48dp"/>
         <ImageButton
             android:id="@+id/panelRecal"
@@ -36,6 +41,14 @@
             android:src="@android:drawable/ic_menu_rotate"
             android:padding="12dp"
             android:contentDescription="@string/position_read"
+            android:layout_width="48dp"
+            android:layout_height="48dp"/>
+        <ImageButton
+            android:id="@+id/panelColor"
+            android:src="@drawable/ic_side_white"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:padding="10dp"
+            android:contentDescription="@string/panel_color_white"
             android:layout_width="48dp"
             android:layout_height="48dp"/>
         <LinearLayout
@@ -160,6 +173,15 @@
                 android:maxWidth="276dp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"/>
+            <Button
+                android:id="@+id/panelMateLine"
+                style="?android:attr/borderlessButtonStyle"
+                android:text="@string/mate_line_show"
+                android:textAllCaps="false"
+                android:textColor="#FFD3E8DA"
+                android:visibility="gone"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"/>
             <TextView
                 android:id="@+id/panelContinuation"
                 android:textColor="#FFB0BEC5"

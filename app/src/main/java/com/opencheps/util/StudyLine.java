@@ -6,8 +6,11 @@ import java.util.List;
 public final class StudyLine {
     private StudyLine() {}
     public static String format(List<String> moves, Side first) {
+        return format(moves, first, 6);
+    }
+    public static String format(List<String> moves, Side first, int maxPlies) {
         StringBuilder text = new StringBuilder();
-        for (int i = 0; i < Math.min(6, moves.size()); i++) {
+        for (int i = 0; i < Math.min(maxPlies, moves.size()); i++) {
             String move = moves.get(i);
             if (move == null || !move.matches("[a-h][1-8][a-h][1-8][qrbn]?")) break;
             if (i > 0) text.append(i % 2 == 0 ? "\n" : "   ");

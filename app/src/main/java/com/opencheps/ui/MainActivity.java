@@ -99,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
         line.setChecked(Prefs.showStudyLine(this));
         limit.setOnCheckedChangeListener((button, checked) -> {
             Prefs.setLimitStrength(this, checked);
-            eloBar.setEnabled(checked);
+            eloBar.setEnabled(checked && !Prefs.evaluationOnly(this));
         });
         line.setOnCheckedChangeListener((button, checked) -> Prefs.setShowStudyLine(this, checked));
         thinkTv.setText(thinkLabelText(think));
@@ -136,6 +136,24 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onStartTrackingTouch(SeekBar bar) {}
             @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
+        CheckBox evaluation = findViewById(R.id.evaluationOnly);
+        CheckBox mateLine = findViewById(R.id.showMateLine);
+        evaluation.setChecked(Prefs.evaluationOnly(this));
+        mateLine.setChecked(Prefs.showMateLine(this));
+        Runnable updateModeControls = () -> {
+            boolean scoreOnly = evaluation.isChecked();
+            limit.setEnabled(!scoreOnly);
+            eloBar.setEnabled(!scoreOnly && limit.isChecked());
+            choices.setEnabled(!scoreOnly);
+            line.setEnabled(!scoreOnly);
+            mateLine.setEnabled(scoreOnly);
+        };
+        evaluation.setOnCheckedChangeListener((button, checked) -> {
+            Prefs.setEvaluationOnly(this, checked);
+            updateModeControls.run();
+        });
+        mateLine.setOnCheckedChangeListener((button, checked) -> Prefs.setShowMateLine(this, checked));
+        updateModeControls.run();
         sideGroup.setOnCheckedChangeListener((g, id) -> {
             Prefs.setUserSide(this, id == R.id.sideBlack ? "b" : "w");
         });
@@ -167,6 +185,8 @@ public class MainActivity extends AppCompatActivity {
                 ? getString(R.string.overlay_granted)
                 : getString(R.string.grant_overlay));
         sideGroup.check("b".equals(Prefs.userSide(this)) ? R.id.sideBlack : R.id.sideWhite);
+        ((CheckBox)findViewById(R.id.evaluationOnly)).setChecked(Prefs.evaluationOnly(this));
+        ((CheckBox)findViewById(R.id.showMateLine)).setChecked(Prefs.showMateLine(this));
         updateSessionControls();
     }
 

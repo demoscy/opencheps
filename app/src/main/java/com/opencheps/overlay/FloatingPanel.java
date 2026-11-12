@@ -18,6 +18,7 @@ import android.util.DisplayMetrics;
 
 import com.opencheps.R;
 import com.opencheps.util.Side;
+import com.opencheps.util.Prefs;
 import com.opencheps.ui.MainActivity;
 
 public class FloatingPanel {
@@ -26,7 +27,9 @@ public class FloatingPanel {
     private final WindowManager wm;
     private View root;
     private WindowManager.LayoutParams lp;
-    private TextView statusTv, evalTv, continuationTv;
+    private TextView statusTv, evalTv, continuationTv, compactScore;
+    private Button mateLineBtn;
+    private boolean evaluationOnly, mateAvailable;
     private ImageButton toggleBtn, colorBtn;
     private Button turnBtn, flipBtn;
     private Side turn = Side.WHITE;
@@ -43,6 +46,7 @@ public class FloatingPanel {
         void onSetBoardArea();
         void onCheckBoard();
         default void onSpecialMoves() {}
+        default void onMateLineToggle(boolean show) {}
         void onSideChange(Side newSide);
         void onTurnChange(Side side);
         void onFlipBoard();
@@ -75,6 +79,11 @@ public class FloatingPanel {
         statusTv    = root.findViewById(R.id.panelStatus);
         evalTv      = root.findViewById(R.id.panelEval);
         continuationTv = root.findViewById(R.id.panelContinuation);
+        compactScore = root.findViewById(R.id.panelCompactScore);
+        mateLineBtn = root.findViewById(R.id.panelMateLine);
+        mateLineBtn.setOnClickListener(v -> {
+            if (listener != null) listener.onMateLineToggle(!Prefs.showMateLine(ctx));
+        });
         toggleBtn   = root.findViewById(R.id.panelToggle);
         turnBtn = root.findViewById(R.id.panelTurn);
         flipBtn = root.findViewById(R.id.panelFlip);
@@ -163,6 +172,7 @@ public class FloatingPanel {
 
         try { wm.addView(root, lp); }
         catch (Exception e) { root = null; return false; }
+        setEvaluationOnly(Prefs.evaluationOnly(ctx));
         renderSideToggle();
         return true;
     }
@@ -235,11 +245,39 @@ public class FloatingPanel {
         minimized = value;
         expanded.setVisibility(value ? View.GONE : View.VISIBLE);
         expandedActions.setVisibility(value ? View.GONE : View.VISIBLE);
+        compactScore.setVisibility(value && evaluationOnly ? View.VISIBLE : View.GONE);
         updateLogoDescription();
         lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
         try { wm.updateViewLayout(root, lp); } catch (Exception ignored) {}
         root.requestLayout();
         root.post(this::clampPosition);
+    }
+
+    public void setEvaluationOnly(boolean enabled) {
+        if (root == null) return;
+        if (evaluationOnly != enabled) {
+            evaluationOnly = enabled;
+            evalTv.setTextSize(enabled ? 18 : 12);
+            setEval("");
+            setMinimized(minimized);
+        }
+    }
+
+    public void setPositionScore(String score, boolean hasMateLine, String line, boolean complete) {
+        if (!evaluationOnly || compactScore == null) return;
+        setEval(score);
+        compactScore.setText(score.isEmpty() ? "—" : score);
+        compactScore.setContentDescription(score.isEmpty() ? ctx.getString(R.string.position_score_unavailable)
+                : ctx.getString(R.string.position_score_description, userSide.name(), score));
+        mateAvailable = hasMateLine;
+        mateLineBtn.setVisibility(mateAvailable ? View.VISIBLE : View.GONE);
+        boolean show = Prefs.showMateLine(ctx);
+        mateLineBtn.setText(show ? R.string.mate_line_hide : R.string.mate_line_show);
+        continuationTv.setMaxLines(Integer.MAX_VALUE);
+        continuationTv.setEllipsize(null);
+        continuationTv.setText(line.isEmpty() || !show ? "" : ctx.getString(
+                complete ? R.string.mate_line : R.string.mate_line_partial, line));
+        continuationTv.setVisibility(line.isEmpty() || !show ? View.GONE : View.VISIBLE);
     }
 
     public boolean isMinimized() { return minimized; }
@@ -278,7 +316,15 @@ public class FloatingPanel {
         if (evalTv == null) return;
         Runnable update = () -> {
             evalTv.setText(s == null ? "" : s);
-            if (s == null || s.isEmpty()) setContinuation("");
+            if (s == null || s.isEmpty()) {
+                setContinuation("");
+                if (compactScore != null) {
+                    compactScore.setText("—");
+                    compactScore.setContentDescription(ctx.getString(R.string.position_score_unavailable));
+                }
+                if (mateLineBtn != null) mateLineBtn.setVisibility(View.GONE);
+                mateAvailable = false;
+            }
         };
         if (Looper.myLooper() == Looper.getMainLooper()) update.run();
         else evalTv.post(update);
@@ -286,6 +332,8 @@ public class FloatingPanel {
 
     public void setContinuation(String line) {
         if (continuationTv == null) return;
+        continuationTv.setMaxLines(4);
+        continuationTv.setEllipsize(android.text.TextUtils.TruncateAt.END);
         continuationTv.setText(line.isEmpty() ? "" : ctx.getString(R.string.possible_line, line));
         continuationTv.setVisibility(line.isEmpty() ? View.GONE : View.VISIBLE);
     }

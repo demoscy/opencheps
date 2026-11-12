@@ -125,4 +125,27 @@ public class MainActivityTest {
             }
         }
     }
+    @Test public void evaluationOnlyControlsSurviveRecreationWithoutChangingArrowPreferences() {
+        Prefs.get(RuntimeEnvironment.getApplication()).edit().clear().commit();
+        Prefs.setLimitStrength(RuntimeEnvironment.getApplication(),true);
+        Prefs.setPracticeElo(RuntimeEnvironment.getApplication(),1600);Prefs.setMultiPv(RuntimeEnvironment.getApplication(),5);
+        try (org.robolectric.android.controller.ActivityController<MainActivity> controller=Robolectric.buildActivity(MainActivity.class).setup()) {
+            MainActivity activity=controller.get();
+            ((CheckBox)activity.findViewById(R.id.evaluationOnly)).performClick();
+            ((CheckBox)activity.findViewById(R.id.showMateLine)).performClick();
+            assertFalse(activity.findViewById(R.id.multiPvBar).isEnabled());
+            assertFalse(activity.findViewById(R.id.eloBar).isEnabled());
+            assertFalse(activity.findViewById(R.id.showStudyLine).isEnabled());
+            controller.recreate();activity=controller.get();
+            assertTrue(((CheckBox)activity.findViewById(R.id.evaluationOnly)).isChecked());
+            assertTrue(((CheckBox)activity.findViewById(R.id.showMateLine)).isChecked());
+            controller.pause().stop();
+            Prefs.setShowMateLine(activity,false); // Changed through the floating panel while settings were closed.
+            controller.start().resume();
+            assertFalse(((CheckBox)activity.findViewById(R.id.showMateLine)).isChecked());
+            ((CheckBox)activity.findViewById(R.id.evaluationOnly)).performClick();
+            assertTrue(activity.findViewById(R.id.eloBar).isEnabled());assertEquals(1600,Prefs.strengthElo(activity));
+            assertEquals(5,Prefs.multiPv(activity));
+        }
+    }
 }

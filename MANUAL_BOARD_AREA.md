@@ -243,7 +243,7 @@ Phone acceptance also requires checking:
   notification Stop, permission revocation and restart; no orphaned windows or
   stale results. Unsupported multi-window capture should pause safely.
 
-Validation on 2026-11-11: all 169 unit/Robolectric tests passed; both ARM debug APK
+Validation on 2026-11-11: all 185 unit/Robolectric tests passed; both ARM debug APK
 splits built; lint completed with zero errors and 44 warnings. `git diff --check`
 passed. APK inspection confirmed the verified model/licenses, the expected ABI
 libraries, no test screenshots, and no added Internet permission. These results
@@ -377,3 +377,50 @@ and dark board squares. Verify enlarged tips, matching stripe/border colors and
 readable scores; repeat with one choice and Black below. Launch and reopen
 settings without a notification permission popup, start sharing, and test Pause,
 Resume and Stop. Physical-device behavior still needs confirmation.
+
+
+## Evaluation-only follow-up
+
+Settings now offers a persistent evaluation-only mode and separate optional mate
+line disclosure. The engine evaluates the actual FEN side to move at full strength,
+MultiPV 1, on either side's turn. Its root score is converted to the selected
+color's perspective. Existing practice strength, candidates and study settings are
+preserved. Evaluations cache by FEN, effective settings and mode. Changing a board
+or mode rejects stale output. Selecting color in evaluation mode leaves orientation,
+turn, castling rights and recognized pieces intact.
+
+The minimized 232×56 dp strip has logo, score, re-read and pawn color controls.
+Scores are cleared while a new board is being confirmed or capture is paused,
+unclear, hidden, edited or showing settings. The overlay service rejects late
+arrow/frame updates while evaluation-only mode is enabled. The existing capture
+mask automatically covers the strip's score pixels.
+
+The score parser accepts exact single-PV cp/mate reports, including mate zero
+and stalemate without legal moves. It rejects bound-only/malformed/missing scores
+instead of inventing an equal position. Mate PV collection retains up to 128
+plies, separately from the unchanged six-ply arrow study limit. Shorter same-score
+mate reports do not erase a longer cached line. A mate-line button reveals text
+from that score's cached PV; no extra search or move execution runs. Partial lines
+are labeled, and the UI says shortest found rather than guaranteeing a globally
+fastest mate under a short time budget.
+
+Phone acceptance:
+
+1. Enable Evaluation only in Settings, return to a browser study/bot board, and
+   minimize. Verify logo, numeric/M score, re-read and pawn controls remain visible;
+   no board arrows or frame should appear.
+2. Make moves for both colors. Verify the score refreshes after each confirmed
+   position. Toggle the pawn: the score sign should reverse while the board and
+   Turn control stay unchanged. Check White-below and Black-below layouts.
+3. Test a mate-in-one, a longer forced mate, checkmate and stalemate. Expand and
+   tap Show/Hide mate line. Minimize again: only the score remains. Incomplete
+   lines should say partial. Disabling mate disclosure must hide future lines.
+4. Pause, obscure/change the board, open calibration or Settings: the compact
+   score must not keep stale values. Resume, rotate and re-read safely.
+5. Disable evaluation-only mode. Your saved Elo, move choices and normal study
+   setting should return. Recheck arrow colors, calibration and special moves.
+
+Real-host Stockfish checks cover terminal scores, legal mate PVs through game end,
+correct mode transitions and restoration of five Elo-limited choices. Native
+raster previews verify that the compact score actually draws, not just that its
+TextView contains text. Android phone capture still requires acceptance testing.

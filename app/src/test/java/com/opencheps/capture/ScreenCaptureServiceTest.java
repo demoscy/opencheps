@@ -747,4 +747,100 @@ public class ScreenCaptureServiceTest {
                 android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION,service.getForegroundServiceType());
     }
 
+    @Test public void evaluationModeScoresBothActualTurnsWithoutSuggestionsAndClearsDuringChanges() {
+        com.opencheps.util.Prefs.setEvaluationOnly(service,true);
+        com.opencheps.util.Prefs.setLimitStrength(service,true);
+        com.opencheps.util.Prefs.setMultiPv(service,5);
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        org.robolectric.android.controller.ServiceController<com.opencheps.overlay.OverlayService> overlay=
+                Robolectric.buildService(com.opencheps.overlay.OverlayService.class).create();
+        try {
+            List<String> queries=new ArrayList<>();
+            ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+                @Override public synchronized com.opencheps.util.PositionEvaluation evaluate(String fen,int time) {
+                    queries.add(fen);
+                    return new com.opencheps.util.PositionEvaluation(fen.contains(" b ")?-90:125,false,Collections.singletonList("e2e4"));
+                }
+                @Override public synchronized List<Pv> analyze(String fen,int time,int elo,int count,boolean line) {
+                    throw new AssertionError("Evaluation must not select handicapped moves");
+                }
+            });
+            com.opencheps.overlay.FloatingPanel panel=com.opencheps.overlay.OverlayService.panel();
+            panel.setMinimized(true);
+            android.view.View root=ReflectionHelpers.getField(panel,"root");
+            android.widget.TextView score=root.findViewById(com.opencheps.R.id.panelCompactScore);
+            char[][] initial=ReflectionHelpers.callInstanceMethod(service,"startingGridFor",from(Side.class,Side.WHITE));
+            recognizeTwice(initial,null);ShadowLooper.idleMainLooper();
+            assertEquals("+1.25",score.getText().toString());
+            char[][] moved=copy(initial);moved[6][4]='.';moved[4][4]='P';
+            ReflectionHelpers.callInstanceMethod(service,"processRecognizedGrid",from(char[][].class,moved),
+                    from(BoardDetector.Board.class,new BoardDetector.Board(0,0,320,1)),from(Bitmap.class,null));
+            ShadowLooper.idleMainLooper();assertEquals("—",score.getText().toString());
+            recognizeTwice(moved,null);ShadowLooper.idleMainLooper();
+            assertEquals("+0.90",score.getText().toString());
+            assertTrue(queries.get(1).contains(" b KQkq - "));
+            char[][] reply=copy(moved);reply[1][4]='.';reply[3][4]='p';
+            recognizeTwice(reply,null);ShadowLooper.idleMainLooper();
+            assertEquals(3,queries.size());assertTrue(queries.get(2).contains(" w KQkq - "));
+            List<?> arrows=ReflectionHelpers.getField(service,"currentArrows");assertTrue(arrows.isEmpty());
+            List<?> pvs=ReflectionHelpers.getField(service,"currentPvs");assertTrue(pvs.isEmpty());
+            recognizeTwice(reply,null);assertEquals(3,queries.size());
+            char[][] unclear=copy(reply);unclear[7][4]='.';
+            recognizeTwice(unclear,null);ShadowLooper.idleMainLooper();
+            assertEquals("—",score.getText().toString());
+        } finally {overlay.destroy();}
+    }
+
+    @Test public void evaluationPerspectiveSwitchKeepsTheBoardAndTurnAndChangesOnlyTheScoreSign() {
+        com.opencheps.util.Prefs.setEvaluationOnly(service,true);
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true);
+        org.robolectric.android.controller.ServiceController<com.opencheps.overlay.OverlayService> overlay=
+                Robolectric.buildService(com.opencheps.overlay.OverlayService.class).create();
+        try {
+            ReflectionHelpers.setField(service,"worker",new Handler(Looper.getMainLooper()));
+            ReflectionHelpers.callInstanceMethod(service,"wirePanel");
+            ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+                @Override public synchronized com.opencheps.util.PositionEvaluation evaluate(String fen,int time) {
+                    return new com.opencheps.util.PositionEvaluation(-150,false,Collections.singletonList("e7e5"));
+                }
+            });
+            ReflectionHelpers.setField(service,"observedStm",Side.BLACK);ReflectionHelpers.setField(service,"turnExplicit",true);
+            char[][] board=ReflectionHelpers.callInstanceMethod(service,"startingGridFor",from(Side.class,Side.WHITE));
+            recognizeTwice(board,null);ShadowLooper.idleMainLooper();
+            android.view.View root=ReflectionHelpers.getField(com.opencheps.overlay.OverlayService.panel(),"root");
+            root.findViewById(com.opencheps.R.id.panelColor).performClick();ShadowLooper.idleMainLooper();
+            assertEquals(Side.WHITE,ReflectionHelpers.getField(service,"boardSide"));
+            assertEquals(Side.BLACK,ReflectionHelpers.getField(service,"observedStm"));
+            assertSame(board,ReflectionHelpers.getField(service,"confirmedGrid"));
+            AtomicInteger epoch=ReflectionHelpers.getField(service,"epoch");ReflectionHelpers.setField(service,"frameEpoch",epoch.get());
+            recognizeTwice(board,null);ShadowLooper.idleMainLooper();
+            assertEquals("-1.50",((android.widget.TextView)root.findViewById(com.opencheps.R.id.panelCompactScore)).getText().toString());
+        } finally {ReflectionHelpers.setField(service,"worker",null);overlay.destroy();}
+    }
+
+    @Test public void mateDisclosureUsesCachedTextAndModeChangesDiscardInFlightScores() {
+        com.opencheps.util.Prefs.setEvaluationOnly(service,true);
+        int[] evaluations={0};
+        ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+            @Override public synchronized com.opencheps.util.PositionEvaluation evaluate(String fen,int time) {
+                evaluations[0]++;return new com.opencheps.util.PositionEvaluation(99999,true,Collections.singletonList("g6g7"));
+            }
+        });
+        char[][] board=ReflectionHelpers.callInstanceMethod(service,"startingGridFor",from(Side.class,Side.WHITE));
+        recognizeTwice(board,null);
+        com.opencheps.util.Prefs.setShowMateLine(service,true);
+        ReflectionHelpers.callInstanceMethod(service,"refreshStudyLine");recognizeTwice(board,null);
+        assertEquals(1,evaluations[0]);
+        ReflectionHelpers.setField(service,"lastEngineFen","");
+        ReflectionHelpers.setField(service,"engine",new StockfishEngine() {
+            @Override public synchronized com.opencheps.util.PositionEvaluation evaluate(String fen,int time) {
+                com.opencheps.util.Prefs.setEvaluationOnly(service,false);
+                return new com.opencheps.util.PositionEvaluation(100,false,Collections.singletonList("e2e4"));
+            }
+        });
+        recognizeTwice(board,null);
+        assertEquals("",ReflectionHelpers.getField(service,"lastEngineFen"));
+        assertNull(ReflectionHelpers.getField(service,"positionEvaluation"));
+    }
+
 }

@@ -62,7 +62,7 @@
             android:layout_height="wrap_content"/>
 
         <TextView
-            android:text="Arrows only appear on YOUR turn. The app decides whose turn it is by what you tell it here."
+            android:text="@string/side_help"
             android:textColor="#FFB0BEC5"
             android:textSize="11sp"
             android:paddingTop="2dp"
@@ -166,6 +166,33 @@
 
         <SeekBar
             android:id="@+id/thinkBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+
+        <CheckBox
+            android:id="@+id/evaluationOnly"
+            android:text="@string/evaluation_only"
+            android:textColor="#FFFFFFFF"
+            android:minHeight="48dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:text="@string/evaluation_only_help"
+            android:textColor="#FFB0BEC5"
+            android:textSize="12sp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+        <CheckBox
+            android:id="@+id/showMateLine"
+            android:text="@string/show_mate_line"
+            android:textColor="#FFFFFFFF"
+            android:minHeight="48dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"/>
+        <TextView
+            android:text="@string/mate_line_help"
+            android:textColor="#FFB0BEC5"
+            android:textSize="12sp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
 

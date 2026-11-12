@@ -46,7 +46,7 @@ king/rook round trip cannot be reconstructed from identical pixels.
 
 Tap the **OpenCheps logo** to minimize or expand the panel; drag the logo to
 reposition it. The minimized strip keeps three 48 dp controls: logo, selected
-White/Black pawn and the blue **Read current position** button. Tap the pawn to
+blue **Read current position** button and White/Black pawn. Tap the pawn to
 switch the analysis side. Minimizing keeps analysis, arrows and normal Pause.
 The strip retains its state across background transitions and rotation within
 one capture session. Positions are clamped away from system bars/cutouts; the
@@ -116,6 +116,36 @@ are shifted within the board when space allows. These scores are position evalua
 OpenCheps does not request notification permission. Android still requires a
 foreground service for screen capture; its required service notification and
 system capture indicator are retained, including the Stop action where shown.
+
+## Evaluation only
+
+Enable **Evaluation only — no arrows** in Settings. It evaluates the position
+currently on screen after **either** player moves, with no board arrows or green
+frame. Positive scores favor the color selected by the pawn button, negative
+scores favor its opponent. `M3` means the selected color has mate in three moves
+found by the engine; `-M3` means it faces mate in three. `M0` / `-M0` marks an
+already checkmated position; stalemate is `+0.00`.
+
+The compact strip keeps **logo · score · Read current position · color** visible.
+Tap the logo to expand or minimize. Changing color in this mode changes score
+perspective without flipping the board or resetting its known turn. In an
+existing puzzle, correct **Turn** and board orientation if necessary. Uncertain
+or changing boards, Pause and calibration clear the score to `—`.
+
+Evaluation uses full-strength Stockfish with one principal variation and your
+chosen think time. Practice Elo, move choices and the normal study continuation
+are ignored in this mode; their saved values return when you switch back. The
+score describes the current position under best play. It is not a grade for the
+move just played or an Elo rating.
+
+When mate is found, expand the panel and tap **Show mate line**. Settings also has
+**Show mate line when found**. This reveals cached text only, starting with the
+actual side to move; there are still no arrows and it adds no search. Stockfish
+seeks the shortest forced mate it finds against best defense within the search
+budget, which may miss a faster mate. Longer lines can scroll beyond the normal
+three-move study preview. Truncated or capped lines are explicitly labeled
+**partial** (maximum 128 half-moves). Mate disclosure is off by default and stored
+separately from the arrow-mode study line.
 
 ## Manual board area
 

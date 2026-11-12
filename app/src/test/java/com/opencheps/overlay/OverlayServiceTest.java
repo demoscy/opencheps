@@ -199,4 +199,14 @@ public class OverlayServiceTest {
         assertNull(ReflectionHelpers.getField(controller.get(),"specialMoves"));
         OverlayService.resumeAfterCalibration();
     }
+    @Test public void evaluationOnlyRejectsLateArrowsAndBoardFrames() {
+        ShadowSettings.setCanDrawOverlays(true);
+        controller=Robolectric.buildService(OverlayService.class).create();
+        com.opencheps.util.Prefs.setEvaluationOnly(controller.get(),true);
+        OverlayService.pushArrows(java.util.Collections.singletonList(new ArrowOverlayView.Arrow(10,10,100,100,0xFF00C853,12,"+1.25")),new Rect(0,0,320,320));
+        OverlayService.setBoardBounds(new Rect(0,0,320,320));
+        ArrowOverlayView view=ReflectionHelpers.getField(controller.get(),"arrows");
+        assertNull(ReflectionHelpers.getField(view,"boardBounds"));
+        java.util.List<?> arrows=ReflectionHelpers.getField(view,"arrows");assertTrue(arrows.isEmpty());
+    }
 }

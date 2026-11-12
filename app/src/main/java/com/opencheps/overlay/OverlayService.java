@@ -22,6 +22,7 @@ import androidx.annotation.Nullable;
 
 import com.opencheps.util.BoardArea;
 import com.opencheps.util.Side;
+import com.opencheps.util.Prefs;
 import java.util.function.BiConsumer;
 
 import java.util.List;
@@ -267,9 +268,9 @@ public class OverlayService extends Service {
     }
 
     public static void pushArrows(List<ArrowOverlayView.Arrow> arrows, Rect bounds) {
-        render(v -> { v.setBoardBounds(bounds); v.setArrows(arrows); });
+        render(v -> { if (Prefs.evaluationOnly(v.getContext())) v.clearAll(); else { v.setBoardBounds(bounds); v.setArrows(arrows); } });
     }
-    public static void setBoardBounds(Rect bounds) { render(v -> v.setBoardBounds(bounds)); }
+    public static void setBoardBounds(Rect bounds) { render(v -> { if (Prefs.evaluationOnly(v.getContext())) v.clearAll(); else v.setBoardBounds(bounds); }); }
     public static void setBoardFrameColor(int color) { render(v -> v.setBoardFrameColor(color)); }
     public static void clearArrowsOnly() { render(ArrowOverlayView::clearArrowsOnly); }
     public static void clearAll() { render(ArrowOverlayView::clearAll); }

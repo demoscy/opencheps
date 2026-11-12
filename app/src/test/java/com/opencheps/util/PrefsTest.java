@@ -116,4 +116,16 @@ public class PrefsTest {
         Prefs.get(context).edit().putString(Prefs.KEY_THINK_MS, "bad").commit();
         assertEquals(1500, Prefs.thinkMs(context));
     }
+    @org.junit.Test public void evaluationModeAndMateDisclosurePersistIndependentlyOfPracticeSettings() {
+        android.content.Context context=org.robolectric.RuntimeEnvironment.getApplication();
+        Prefs.get(context).edit().clear().commit();
+        assertFalse(Prefs.evaluationOnly(context));assertFalse(Prefs.showMateLine(context));
+        Prefs.setLimitStrength(context,true);Prefs.setPracticeElo(context,1600);Prefs.setMultiPv(context,5);
+        Prefs.setEvaluationOnly(context,true);Prefs.setShowMateLine(context,true);
+        assertTrue(Prefs.evaluationOnly(context));assertTrue(Prefs.showMateLine(context));
+        Prefs.setEvaluationOnly(context,false);
+        assertEquals(1600,Prefs.strengthElo(context));assertEquals(5,Prefs.multiPv(context));
+        Prefs.get(context).edit().putString("evaluation_only","corrupt").putString("show_mate_line","corrupt").commit();
+        assertFalse(Prefs.evaluationOnly(context));assertFalse(Prefs.showMateLine(context));
+    }
 }
