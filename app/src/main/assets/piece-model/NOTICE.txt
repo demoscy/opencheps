@@ -1,0 +1,20 @@
+OpenCheps offline piece recognition
+
+Model: scoriiu/fenshot, packages/fenshot/model/chess-tiles-v2.onnx
+Revision: be5b491bc51b2e2a231b7616d9256748ee8ab5b9
+SHA256: 883f6a8e639e6d6b6399b3fda0508ad772e3c6f9cefa2e678a13f27b9fa6248d
+https://github.com/scoriiu/fenshot
+Copyright (c) 2026 SORTINO LABS S.R.L. (kibitzo.com). MIT.
+
+Preprocessing follows fenshot's tiles.ts, itself based on
+Elucidation/tensorflow_chessbot. Copyright (c) 2016 Sameer Ansari. MIT.
+The downloaded reference grayscale test image is from that MIT example.
+Other test screenshots are from fenshot's MIT-licensed test fixtures;
+Chess.com and Lichess names/artwork belong to their respective owners.
+Test images are not bundled in the APK.
+
+Runtime: Microsoft ONNX Runtime 1.23.2. MIT.
+The corresponding licenses and third-party notices accompany these assets.
+Only model weights/preprocessing are used from fenshot; no web service or
+analytics code. Recognition runs entirely on the device. The app never
+fetches a model or transmits screenshots.

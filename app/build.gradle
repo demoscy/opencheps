@@ -14,6 +14,10 @@ android {
         versionName "0.2.0"
     }
 
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -44,7 +48,22 @@ android {
 }
 
 dependencies {
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.2'
+    testRuntimeOnly 'com.microsoft.onnxruntime:onnxruntime:1.23.2'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.13'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.core:core:1.13.1'
     implementation 'com.google.android.material:material:1.12.0'
 }
+
+// Keep model binaries out of git patches. Download once at build time, never on the phone.
+def preparePieceModel = tasks.register('preparePieceModel', Exec) {
+    workingDir rootProject.projectDir
+    commandLine 'python3', 'tools/prepare_piece_model.py', '--tests'
+    inputs.file rootProject.file('tools/prepare_piece_model.py')
+    outputs.file file('src/main/assets/piece-model/chess-tiles-v2.onnx')
+    outputs.file file('src/main/assets/piece-model/ThirdPartyNotices-onnxruntime.txt')
+    outputs.dir file('src/test/resources/piece-model')
+}
+tasks.named('preBuild').configure { dependsOn preparePieceModel }

@@ -1,83 +1,203 @@
 # OpenCheps
 
-![CI](https://github.com/Sethdsai/opencheps/actions/workflows/android.yml/badge.svg)
+An Android chess overlay for puzzles, study and bot practice. MediaProjection
+captures a chessboard; local piece recognition and Stockfish 18 produce analysis
+and arrows. No automatic moves, cloud recognition, analytics or account.
 
-A screen-watching chess hint app for Android. It mirrors your screen with `MediaProjection`, finds the chess board in whatever app you're using, asks Stockfish 18 what to play, and draws arrows on top.
+## Current-position recognition
 
-It's a personal project, not a polished commercial product. It works, it has rough edges, and I've documented both honestly below.
+Open an existing puzzle or practice position directly. The bundled offline
+[fenshot](https://github.com/scoriiu/fenshot) tile model replaces opening-position
+template training. There is no “show starting position” requirement. Use a normal
+2D piece theme; uncertain squares or invalid king/pawn arrangements reject the
+frame. Two matching recognized frames are required before adopting a position.
+Recognition confidence and sanity checks cannot guarantee correct analysis.
 
----
+- **White/Black pawn icon** selects the side to analyze and defaults the board
+  orientation to that side at the bottom.
+- **Turn** explicitly sets whose turn it is in an existing position. Subsequent
+  recognized moves update it; arrows appear only for the selected analysis side.
+- **White below / Black below** flips board coordinates independently of turn.
+- The circular **Read current position** button restarts position tracking from
+  the displayed pieces, defaulting the turn to “I play”. Correct Turn if needed.
+- **Pause / Resume / Stop** retain their existing functions.
 
-## What it actually does, end to end
+A still image cannot reliably provide turn, castling rights or en-passant history.
+OpenCheps now tracks special-move rights during observed play. Recognizing the
+standard starting position initializes all four castling rights. Moving a king or
+rook, or capturing a home rook, removes the relevant rights permanently. An
+observed pawn double step enables en passant for the next reply when a capture
+is possible; any subsequent move expires it. Stockfish checks path clearance,
+check and king safety before suggesting either special move.
 
-1. You open OpenCheps, pick **White** or **Black** (the colour you're playing), grant **Display over other apps** and **Screen capture** permissions, hit Start. The activity sends itself to the background.
-2. A foreground service grabs frames from a `VirtualDisplay` at about 1.4 fps. Each frame is downscaled to a 720-pixel longest edge before processing — that's the single biggest performance trick. On a 1080×2340 P30 Lite screen this means we work on ~330×720 instead of the full panel.
-3. A board detector scans that downscaled image for the strongest 8×8 checker pattern and returns its bounding box.
-4. The first time it finds a board, it waits for you to show it the **starting position** (any board theme works). When it sees one, it snapshots all 32 piece-square crops as labeled templates from your own theme, learns the average color of each empty light/dark square, and computes the average luminance delta of white pieces vs black pieces. That's the "calibration" step. It runs once per session.
-5. If the detected board orientation doesn't match the colour you picked, calibration is rejected and the panel says so — you flip the board (or fix the picker) and tap recalibrate.
-6. Every frame after that: locate board → sample each of the 64 squares at its center → if it's within tolerance of empty: empty. Otherwise: figure out the piece's color from luminance delta, then nearest-template within that color group of the same square parity. Build a FEN with **you to move** (your colour). If the FEN changed, send it to Stockfish.
-7. **Whose turn is it?** I use a material-delta heuristic between consecutive distinct frames: material drop → that side just got captured → it's now that side's move. **Arrows only render when it's your turn.** When it's the opponent's turn, the panel says "Black's turn — waiting" (or White's) and shows no arrows. This is the fix for the "showing arrows for my opponent" bug.
-8. Stockfish 18 runs as a child process of the app. I ask for the top 3 candidate moves with a configurable think time (default 1500 ms — strong play, ≈3000 elo). When it answers, I un-flip the coordinates (if you're playing Black) and draw three colored arrows: green for the best move, amber for #2, blue for #3, with the move in algebraic notation labeled at the midpoint. The eval (centipawn or mate-in-N) goes on the floating panel.
-9. The floating panel has its own White/Black pill toggle, so you can fix your colour without going back to the main activity. Changing it triggers recalibration automatically.
+For a puzzle or position opened mid-game, tap **Special moves** in the expanded
+panel. Confirm only the castling rights you know from the game history. Select an
+en-passant target only if the opponent's immediately preceding move was that
+pawn's double step; the target is the square your pawn would land on. Missing home
+kings/rooks and impossible en-passant targets cannot be enabled. **Save** updates
+analysis; **Cancel** discards edits. Capture pauses while this screen is open.
+Rights are session-only, not a global setting shared between unrelated games.
+Re-reading the exact same canonical position retains its rights; an unrelated
+puzzle/history jump starts with unknown rights and can require **Read current
+position**, **Turn**, and confirmation in **Special moves**. An unseen history or
+king/rook round trip cannot be reconstructed from identical pixels.
 
----
+## Compact controls and settings
 
-## Hard numbers I actually measured
+Tap the **OpenCheps logo** to minimize or expand the panel; drag the logo to
+reposition it. The minimized strip keeps three 48 dp controls: logo, selected
+blue **Read current position** button and White/Black pawn. Tap the pawn to
+switch the analysis side. Minimizing keeps analysis, arrows and normal Pause.
+The strip retains its state across background transitions and rotation within
+one capture session. Positions are clamped away from system bars/cutouts; the
+expanded panel scrolls on short displays. A new session starts expanded.
 
-Tested the detector and bootstrap pipeline on synthetic 1080×2340 phone screenshots using Java SE on a desktop (the production Android code is identical):
+The expanded panel uses a **gear icon for Settings**, with icon controls for
+Pause/Resume and Stop and small borderless board/turn actions below.
 
-| Test image                                 | Board score | Detected bbox       | Truth bbox       | Result |
-|--------------------------------------------|------------:|---------------------|------------------|--------|
-| Lichess starting position (cream/brown)    |       133.4 | (58, 526, 988)      | (60, 540, 960)   | ✅ PASS |
-| Lichess starting position (different y)    |       205.2 | (58, 702, 988)      | (30, 700, 1020)  | ✅ PASS |
-| Chess.com starting position (green theme)  |      1075.3 | (58, 468, 988)      | (40, 480, 1000)  | ✅ PASS |
-| Small board (680 px, top-bar UI above)     |      1145.8 | (195, 897, 676)     | (200, 900, 680)  | ✅ PASS |
-| Random noise (no board)                    |         1.3 | —                   | —                | ✅ REJECT |
+The **gear** opens the existing OpenCheps app without stopping MediaProjection.
+The overlay hides and analysis pauses while the app screen is visible. Change
+think time, strength, move choices, study line or side, then tap **Return to board**
+or leave the app to resume. Normal Pause is preserved; changing the selected side
+uses the same orientation/position reset as the panel side toggle. Other settings
+retain turn and board orientation. Starting a second capture is disabled while a
+session is active. No new permissions or background service starts are needed.
 
-Accept threshold is `score > 18`, so the noise image (score 1.3) is correctly rejected. Position error is always within half a square cell. Each pass takes 43–69 ms on a desktop; expect 200–400 ms on a P30 Lite per frame, which fits inside the 700 ms sample period.
+## Study controls
 
-Bootstrap classification on a synthetic mid-game position with templates captured from the starting position: **61/64 squares correct (95.3%)**. The 3 errors were a black knight on c6 misclassified as a pawn, a white pawn on e4 misclassified as a rook, and a white knight on f3 misclassified as a pawn. This is the limit of nearest-neighbor matching with RGB pixel features — see the "what doesn't work great" section below.
+**Move choices** selects **one to five candidate arrows**, defaulting to three.
+Existing saved choice counts are honored. Colors rank the displayed scores:
+green (highest), amber, blue, purple and pink. The star **★** marks Stockfish's
+selected move, including the Elo-limited choice; it may have a different color.
+With one choice, that selected move is green. Fewer arrows appear when the engine
+returns fewer distinct legal moves. More choices share the same search budget and
+can reduce the depth reached for each candidate.
 
----
+Enable **Limit practice strength** and choose **1320–3190 Elo** to use Stockfish
+18's native `UCI_LimitStrength` / `UCI_Elo`. Disable it for full strength. This is
+Stockfish's approximate calibration scale, not a Chess.com rating, and is not
+human imitation or a concealment feature. Think time only controls search time;
+its former device-dependent Elo estimates are removed. Settings persist locally.
+The cap applies to the ★ selected move; other arrows are analysis alternatives.
 
-## How the board detector works
+**Show a 3-move study line** displays up to six half-moves (three for each side),
+with White/Black labels, following the ★ selected move. This is separate from the
+number of candidate arrows and is not a prediction of actual replies. It can
+be shorter near mate/game end or if the
+search yields less. The strength cap applies to the selected next move; the rest
+is an illustrative engine variation, not independently Elo-limited play per ply.
+The line clears with the old evaluation on pause or uncertain/changed positions.
 
-The naive approach (`getPixel()` in a quad-nested loop) is dead on arrival — that's ~3 million JNI calls per frame, multi-second latency on the P30 Lite. I rewrote it properly:
+A strength-limited Stockfish `bestmove` can differ from its top `info ... pv`
+line. The app uses the actual selected move. With the study line enabled, a second search
+restricted to that move obtains its own continuation, capped at 500 ms extra.
+Handicap is disabled for that fixed-root continuation, then reapplied for the
+next move selection. Complete same-root variations are retained when a later
+report is truncated. The strongest candidate never replaces the chosen move.
 
-1. **Downscale** the incoming bitmap to 360 px on its longest edge with `Bitmap.createScaledBitmap`. This is roughly 30× less work than full resolution.
-2. **Bulk pixel read** via `getPixels(int[], …)` once into an int array, then convert to a grayscale int array.
-3. **Integral image** (summed-area table) so any box mean is O(1) instead of O(area).
-4. **Multi-scale grid search**: try 25 different board sizes from `min(W,H)/3` up to 98% of the smaller dimension. For each size, slide a candidate window with a position step of ~½ cell. For each candidate, sample four small box-means in the four corners of each of the 64 squares, take the median (median of four is robust to a piece sitting on one corner), then score the candidate as `(meanLight − meanDark)² / (noiseFloor + stdLight + stdDark)`. This is a Welch-style separability ratio: high score = consistent two-color pattern.
-5. **Local refinement**: around the best candidate, search ±cell pixels in each direction and ±cell/4 in size, and re-score. Adds about 50 evaluations on top of the ~7,600 from the coarse pass.
-6. **Acceptance threshold** of 18. Real boards score in the hundreds or thousands; random screen content scores in the low single digits.
+For quicker suggestions, set **Think time** to **100–300 ms** and turn off
+**Show a 3-move study line**. Disabling the line skips its extra search entirely;
+one-to-five next-move choices remain available. Short searches may miss tactics
+and still produce strong moves. Think time is the engine's search budget, not
+total response time: capture, recognition, two matching frames and scheduling
+also add delay. Changing time or the line setting refreshes the same position.
 
-There are no Sobel filters, no Hough lines, no OpenCV dependency. The whole thing is ~150 lines of plain Java and tested clean on four different board themes.
+Arrow chips show each candidate's own engine evaluation instead of its square
+coordinates, such as **+0.80**, **-1.25**, **M3** or **-M2**. Positive scores favor
+the selected analysis side; board orientation does not change this perspective.
+The star marks the selected move, which can be weaker than alternatives
+when strength is limited. **—** means the engine supplied no score. Thicker chip
+outlines and solid side stripes match arrow colors. Larger arrowheads have dark
+outlines and are drawn above every shaft, so later crossing lines do not cover
+their tips. All arrowheads are drawn before any score boxes;
+opaque box backgrounds keep later lines from obscuring a score. Overlapping chips
+are shifted within the board when space allows. These scores are position evaluations, not move-quality classifications.
 
----
+OpenCheps does not request notification permission. Android still requires a
+foreground service for screen capture; its required service notification and
+system capture indicator are retained, including the Stop action where shown.
 
-## How the classifier works
+## Evaluation only
 
-There's no machine-learning model file shipped with the app. Instead:
+Enable **Evaluation only — no arrows** in Settings. It evaluates the position
+currently on screen after **either** player moves, with no board arrows or green
+frame. Positive scores favor the color selected by the pawn button, negative
+scores favor its opponent. `M3` means the selected color has mate in three moves
+found by the engine; `-M3` means it faces mate in three. `M0` / `-M0` marks an
+already checkmated position; stalemate is `+0.00`.
 
-- **Bootstrap.** The first frame that contains a starting position calibrates everything. I sample the center 56% of each square (radius = 0.28 × cell — kept tight to avoid leaking into neighbor squares when the detector's offset is slightly off). For empty middle squares I average the RGB to get a reference "empty light" and "empty dark" color. The maximum RGB distance of an actual empty square from its reference defines the tolerance — anything within 3.5× that distance is considered empty. The 32 occupied squares become labeled piece templates. I also compute the average luminance delta (square mean luminance − empty-square reference luminance) separately for white pieces and black pieces — this becomes the color prior.
-- **Classification each frame.** For each of the 64 squares: if its mean RGB is within tolerance of the reference empty color for that parity, it's empty. Otherwise: compute its luminance delta from the empty reference, decide white piece vs black piece based on which average it's closer to, then take the nearest pixel-distance template **within that piece-color group and matching square parity**. The two-stage gate (color first, type second) cuts the classification error roughly in half on positions where white and black pieces sit on the same square parity — before, a black knight on a dark square might end up matched against a white piece template whose silhouette happened to be similar; now it can only be matched against the 16 black-piece templates.
-- **Side detection at bootstrap.** Average the luminance of every filled top-rank square vs every filled bottom-rank square. Brighter on the bottom → board shows White at bottom. If this disagrees with the colour you picked in the UI, bootstrap is rejected and you're told.
-- **Side-to-move tracking.** Material delta between consecutive distinct frames. Material went down → that side just got captured → it's that side's move now. Fallback for non-capture moves: simple alternation. **Arrows are only drawn when the inferred side-to-move equals the colour you picked.** When it's not your turn, the overlay clears and the panel shows whose turn it thinks it is.
+The compact strip keeps **logo · score · Read current position · color** visible.
+Tap the logo to expand or minimize. Changing color in this mode changes score
+perspective without flipping the board or resetting its known turn. In an
+existing puzzle, correct **Turn** and board orientation if necessary. Uncertain
+or changing boards, Pause and calibration clear the score to `—`.
 
----
+Evaluation uses full-strength Stockfish with one principal variation and your
+chosen think time. Practice Elo, move choices and the normal study continuation
+are ignored in this mode; their saved values return when you switch back. The
+score describes the current position under best play. It is not a grade for the
+move just played or an Elo rating.
 
-## What doesn't work great, and why
+When mate is found, expand the panel and tap **Show mate line**. Settings also has
+**Show mate line when found**. This reveals cached text only, starting with the
+actual side to move; there are still no arrows and it adds no search. Stockfish
+seeks the shortest forced mate it finds against best defense within the search
+budget, which may miss a faster mate. Longer lines can scroll beyond the normal
+three-move study preview. Truncated or capped lines are explicitly labeled
+**partial** (maximum 128 half-moves). Mate disclosure is off by default and stored
+separately from the arrow-mode study line.
 
-I'm being upfront here:
+## Manual board area
 
-- **Same-color piece confusion.** The classifier matches by raw pixel distance within a color group. Two pieces of the same color on squares of the same parity look very similar at our 16×16 sampled feature size — a knight and a pawn especially. Expect 1–4 wrong squares per mid-game position depending on theme. This usually still produces a *legal* FEN, and Stockfish gives a sensible move for that position; visually the move usually looks plausible too. To go meaningfully higher you'd need a CNN classifier (32×32×3 → 13-way softmax), trained on screenshots from common chess apps. I left a clean place to plug that in (`PieceClassifier.classifyBoard`).
-- **"It suggested a wrong move."** Stockfish 18 is rated ~3645 Elo — it does not suggest wrong moves. When it looks wrong, the cause is almost always one of: (a) wrong colour selected — arrows are for your *opponent's* best move because the engine thinks it's their turn; (b) a piece was misclassified so the position Stockfish analyzed isn't the position on your screen; (c) the FEN side-to-move was wrong due to material-tracking confusion (typically after a complicated sequence). Hit **Recalibrate** on the floating panel, double-check the white/black pill, and the next frame should be correct.
-- **Animations.** During chess.com's slide animation, the captured frame is mid-motion and the FEN can parse as something nonsense. The duplicate-FEN-skip means the bad frame doesn't usually trigger an engine call, but you'll see ~1 second of stale arrows.
-- **Theme changes mid-session.** If you swap board theme without recalibrating, every square will read as "occupied" because the empty colors no longer match. The fix is the **Recalibrate** button on the floating panel — tap it and show the starting position again.
-- **Castling, en passant, draw claims.** The FEN I build always has castling rights `-` and ep-square `-`. Stockfish will still play legal moves, but it won't suggest castling. Adding real castling rights tracking requires move-history reconstruction, which I haven't done.
-- **EMUI battery killer.** Huawei's EMUI is aggressive about killing background services. Go to *Settings → Apps → OpenCheps → Battery → App launch* and switch it to "Manage manually" with Auto-launch, Run in background, and Secondary launch all on. Without this, the service is killed within a minute of you switching away from the OpenCheps activity.
+**Set board area** opens a draggable square with four resize handles and an 8×8
+grid. Match the playable board exactly, excluding outside coordinates and borders.
+**Save** remembers normalized bounds. Up to eight different layouts are retained;
+confident recognition chooses between compatible saved crops, favoring the active
+crop on near ties. **Auto** clears all manual areas and restores the existing
+automatic detector. **Cancel** preserves settings. Recognition crops and arrow
+coordinates use the same selected square and capture-to-display transform.
 
----
+Each different Chess.com layout may need calibration once. New unknown layout
+bounds are not inferred from the piece model. Rotation/aspect validation prevents
+using a saved portrait rectangle in an incompatible layout. See
+[calibration, diagnosis and phone tests](MANUAL_BOARD_AREA.md).
+
+## Capture
+
+Android's screen-capture chooser supports Chess.com only or the entire screen.
+Keep the shared app full-screen. Captured content dimensions and system-bar
+insets map app-only content back to the physical overlay screen. Unknown
+split/floating layouts pause instead of guessing. Hidden shared content clears
+arrows and waits.
+
+The calibration editor pauses analysis and detaches capture. App-only capture
+with a recognized content viewport avoids hiding other-app overlays. Entire-screen
+capture uses masked change probes while idle, then hides OpenCheps briefly for
+clean recognition frames after a change or for confirmation. A 15-second clean
+check covers obscured changes, so some brief blinking remains in this path.
+Screenshots stay in memory. No new permissions or runtime network requests.
+
+## Detection and recognition
+
+The existing automatic checker-pattern detector uses reduced-resolution grayscale
+integral images, a coarse multiscale search and local refinement. It identifies
+approximate edges, which can be vertically offset or the wrong size. Manual
+calibration bypasses it. The piece recognizer does not change automatic bounds.
+
+The offline model reads 64 grayscale 32×32 tiles. It rejects any tile below 0.70
+confidence; king/pawn checks and stable-frame confirmation filter further errors.
+Black perspective flips placement and arrow mapping, not piece colours. Move
+tracking supports ordinary moves, captures, castling changes and some quick
+computer replies; ambiguous jumps clear stale analysis and request a fresh read.
+Unsupported 3D/cartoon themes and animation can still fail.
+
+**Check board** opens a paused, memory-only preview of the last clean board crop,
+with its age and recognition result. It identifies the weakest square and its
+confidence, or a rejected king/pawn arrangement. Close it to resume; normal Pause
+remains in effect. The preview uses a separate bitmap and detaches capture before
+appearing, so its controls never become recognition input. It does not save images
+or relax acceptance checks. A matching calibration grid does not by itself prove
+that the captured crop, scaled pieces or theme will pass recognition.
 
 ## Stockfish 18
 
@@ -94,72 +214,46 @@ Engine settings configured in `StockfishEngine.start`:
 ```
 setoption name Threads value 2
 setoption name Hash value 48
-setoption name MultiPV value 3
+setoption name MultiPV value 1
 setoption name Move Overhead value 100
 ```
 
-2 threads because the P30 Lite's Kirin 710 has a 4+4 big.LITTLE config and we don't want to choke the UI thread that's already doing image processing. 48 MB hash is a reasonable middle ground. Default think time is 1500 ms per move — this gives Stockfish 18 roughly its full strength on mobile (~3000+ Elo); you can slide it down to 300 ms for snappier response or up to 3000 ms for absolute maximum play.
+Stockfish uses two threads and a 48 MB hash. The default search time is 1500 ms,
+configurable from 100 to 3000 ms. With the study line enabled, at most another
+500 ms obtains the selected move's continuation when needed; with it off there
+is no follow-up search. MultiPV changes to the requested choice count for
+each analysis. Elo limiting is a separate setting. Stockfish's
+strength calibration cannot be converted directly into your online account rating.
 
----
+## Build, tests and APKs
 
-## CI and APKs
+GitHub Actions builds ARM64 and ARMv7 debug APKs for pull requests to main, pushes
+to main, or manual workflow runs. The workflow downloads and verifies Stockfish.
+Gradle preBuild also runs `python3 tools/prepare_piece_model.py --tests` to fetch
+SHA256-verified, pinned offline model weights, test fixtures and runtime notices.
+The model and licenses are bundled in the APK; the app never downloads them.
+Python 3 uses only its standard library. ONNX Runtime is pinned to 1.23.2.
 
-`.github/workflows/android.yml` builds two ABI-split debug APKs on every push:
+Local builds require JDK 17, Android SDK 34, Gradle 8.7, and the Stockfish binaries
+at `app/src/main/jniLibs/<abi>/libstockfish.so` as installed by the workflow. Run:
 
-- `opencheps-arm64-v8a-debug` (~80 MB) — for any phone made roughly 2017 onwards, including Huawei P30 Lite
-- `opencheps-armeabi-v7a-debug` (~80 MB) — older 32-bit phones only
-
-The Stockfish download is cached between CI runs, so subsequent builds skip the 230 MB download.
-
----
-
-## Permission flow on first launch
-
-1. Open OpenCheps. **Pick your colour** (White or Black) — this is the most important setting in the app. Get it wrong and the arrows will be for your opponent.
-2. Tap **Grant Overlay Permission** → system Settings → enable for OpenCheps → back to app.
-3. Tap **Start Watching** → the system shows the standard *"OpenCheps will start capturing everything that's displayed on your screen"* dialog → tap Start now.
-4. The activity sends itself to the background (`moveTaskToBack`), the floating panel appears, and the notification shows.
-5. Open your chess app at the starting position. Within one or two sample cycles the panel should say "Calibrated • you play WHITE" (or BLACK).
-6. Play normally. Arrows appear only on your turn.
-7. If you ever flip the board, change colour, change theme, or just see the wrong-looking arrows: tap the **white/black pill** on the floating panel (auto-recalibrates) or the **blue circular arrow** button (manual recalibrate).
-
----
-
-## Building locally
-
-You don't need to. Just download the artifact from the latest successful CI run.
-
-If you actually want to: Android Studio Koala or newer, SDK 34. Drop a real `libstockfish.so` (download from the official Stockfish releases page, untar, rename) into `app/src/main/jniLibs/arm64-v8a/` and run `./gradlew assembleDebug`. The CI workflow does exactly this in 25 lines of YAML if you want to see the canonical sequence.
-
----
-
-## File layout
-
-```
-app/src/main/
-├── AndroidManifest.xml                   # 5 permissions, 2 services, 1 activity
-├── java/com/opencheps/
-│   ├── capture/ScreenCaptureService.java # Foreground service. Orchestrates everything.
-│   ├── engine/StockfishEngine.java       # UCI bridge to libstockfish.so
-│   ├── overlay/
-│   │   ├── ArrowOverlayView.java         # Draws arrows + board frame
-│   │   ├── FloatingPanel.java            # The draggable status panel
-│   │   └── OverlayService.java           # Hosts both overlay windows
-│   ├── ui/MainActivity.java              # Permission UI + settings sliders
-│   ├── util/
-│   │   ├── Prefs.java
-│   │   └── Side.java
-│   └── vision/
-│       ├── BoardDetector.java            # Integral-image grid search
-│       ├── FenBuilder.java               # 8x8 char grid → FEN
-│       ├── PieceClassifier.java          # Bootstrap + nearest-template
-│       └── SquareSampler.java            # Bulk-pixel feature extraction
-├── jniLibs/<abi>/libstockfish.so         # Filled in by CI
-└── res/                                  # Themes, layouts, the icon
+```sh
+./gradlew :app:testDebugUnitTest :app:assembleDebug :app:lintDebug
 ```
 
----
+Tests include actual offline inference on Chess.com and Black-side screenshots,
+a sparse nonstarting position, rejected unsupported styles, coordinate transforms,
+manual profile migration/persistence/selection, move tracking, clean-frame policy,
+and editor/overlay lifecycle. Physical capture composition, ARM execution and
+phone touch behavior still need the acceptance tests in MANUAL_BOARD_AREA.md.
+
+Download **opencheps-arm64-v8a-debug** from the successful Actions run's Artifacts
+for Pixel 10 Pro XL. Unzip and install the APK. The armeabi-v7a artifact is for
+older 32-bit phones. No merge into main is needed to run the feature workflow.
 
 ## License
 
-App code: MIT. Stockfish 18 binary: GPL-3.0 (license travels with the bundled binary).
+App code: MIT. Stockfish 18: GPL-3.0. Offline fenshot model and its preprocessing:
+MIT (SORTINO LABS S.R.L.; preprocessing also credits Sameer Ansari's
+`tensorflow_chessbot`). ONNX Runtime: MIT (Microsoft). Attribution, licenses and
+runtime third-party notices accompany the model in APK assets.

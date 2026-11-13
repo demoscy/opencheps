@@ -7,18 +7,21 @@ import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.view.View;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
 
 import com.opencheps.R;
 import com.opencheps.capture.ScreenCaptureService;
@@ -26,9 +29,16 @@ import com.opencheps.util.Prefs;
 
 public class MainActivity extends AppCompatActivity {
 
-    private Button btnOverlay, btnStart, btnStop;
-    private TextView statusTv, thinkTv, multiPvTv;
-    private SeekBar thinkBar, multiPvBar;
+    private Button btnOverlay, btnStart, btnStop, btnReturn;
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Runnable refreshSession = new Runnable() {
+        @Override public void run() {
+            updateSessionControls();
+            ui.postDelayed(this, 500);
+        }
+    };
+    private TextView statusTv, thinkTv, eloTv;
+    private SeekBar thinkBar, eloBar;
     private RadioGroup sideGroup;
     private RadioButton sideWhite, sideBlack;
     private MediaProjectionManager mpm;
@@ -61,53 +71,99 @@ public class MainActivity extends AppCompatActivity {
         btnOverlay = findViewById(R.id.btnOverlay);
         btnStart   = findViewById(R.id.btnStart);
         btnStop    = findViewById(R.id.btnStop);
+        btnReturn = findViewById(R.id.btnReturnToBoard);
+        btnReturn.setOnClickListener(v -> moveTaskToBack(true));
         statusTv   = findViewById(R.id.status);
         thinkTv    = findViewById(R.id.thinkLabel);
-        multiPvTv  = findViewById(R.id.multiPvLabel);
+        eloTv = findViewById(R.id.eloLabel);
         thinkBar   = findViewById(R.id.thinkBar);
-        multiPvBar = findViewById(R.id.multiPvBar);
+        eloBar = findViewById(R.id.eloBar);
         sideGroup  = findViewById(R.id.sideGroup);
         sideWhite  = findViewById(R.id.sideWhite);
         sideBlack  = findViewById(R.id.sideBlack);
 
         SharedPreferences sp = Prefs.get(this);
-        int think = sp.getInt(Prefs.KEY_THINK_MS, 1500);
-        int pv    = sp.getInt(Prefs.KEY_MULTIPV, 3);
+        int think = Prefs.thinkMs(this);
         String side = sp.getString(Prefs.KEY_USER_SIDE, "w");
 
-        thinkBar.setMax(3000);
+        thinkBar.setMax(Prefs.MAX_THINK_MS);
+        thinkBar.setMin(Prefs.MIN_THINK_MS);
         thinkBar.setProgress(think);
-        multiPvBar.setMax(2);
-        multiPvBar.setProgress(pv - 1);
+        eloBar.setMax((Prefs.MAX_ELO - Prefs.MIN_ELO) / 10);
+        eloBar.setProgress((Prefs.practiceElo(this) - Prefs.MIN_ELO) / 10);
+        eloTv.setText(getString(R.string.practice_elo, Prefs.practiceElo(this)));
+        CheckBox limit = findViewById(R.id.limitStrength);
+        CheckBox line = findViewById(R.id.showStudyLine);
+        limit.setChecked(Prefs.limitStrength(this));
+        eloBar.setEnabled(limit.isChecked());
+        line.setChecked(Prefs.showStudyLine(this));
+        limit.setOnCheckedChangeListener((button, checked) -> {
+            Prefs.setLimitStrength(this, checked);
+            eloBar.setEnabled(checked && !Prefs.evaluationOnly(this));
+        });
+        line.setOnCheckedChangeListener((button, checked) -> Prefs.setShowStudyLine(this, checked));
         thinkTv.setText(thinkLabelText(think));
-        multiPvTv.setText("Arrows to show: " + pv);
         if ("b".equals(side)) sideBlack.setChecked(true); else sideWhite.setChecked(true);
 
         thinkBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar b, int v, boolean u) {
-                int t = Math.max(300, v);
+                int t = Prefs.clampThinkMs(v);
                 thinkTv.setText(thinkLabelText(t));
-                sp.edit().putInt(Prefs.KEY_THINK_MS, t).apply();
+                Prefs.setThinkMs(MainActivity.this, t);
             }
             @Override public void onStartTrackingTouch(SeekBar b) {}
             @Override public void onStopTrackingTouch(SeekBar b) {}
         });
-        multiPvBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar b, int v, boolean u) {
-                int n = v + 1;
-                multiPvTv.setText("Arrows to show: " + n);
-                sp.edit().putInt(Prefs.KEY_MULTIPV, n).apply();
+        eloBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean user) {
+                int elo = Prefs.MIN_ELO + value * 10;
+                Prefs.setPracticeElo(MainActivity.this, elo);
+                eloTv.setText(getString(R.string.practice_elo, elo));
             }
-            @Override public void onStartTrackingTouch(SeekBar b) {}
-            @Override public void onStopTrackingTouch(SeekBar b) {}
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
         });
+        SeekBar choices = findViewById(R.id.multiPvBar);
+        TextView choicesLabel = findViewById(R.id.multiPvLabel);
+        choices.setMax(Prefs.MAX_MOVE_CHOICES - 1);
+        choices.setProgress(Prefs.multiPv(this) - 1);
+        choicesLabel.setText(getString(R.string.move_choices, Prefs.multiPv(this)));
+        choices.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int value, boolean user) {
+                Prefs.setMultiPv(MainActivity.this, value + 1);
+                choicesLabel.setText(getString(R.string.move_choices, value + 1));
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        CheckBox evaluation = findViewById(R.id.evaluationOnly);
+        CheckBox mateLine = findViewById(R.id.showMateLine);
+        evaluation.setChecked(Prefs.evaluationOnly(this));
+        mateLine.setChecked(Prefs.showMateLine(this));
+        Runnable updateModeControls = () -> {
+            boolean scoreOnly = evaluation.isChecked();
+            limit.setEnabled(!scoreOnly);
+            eloBar.setEnabled(!scoreOnly && limit.isChecked());
+            choices.setEnabled(!scoreOnly);
+            line.setEnabled(!scoreOnly);
+            mateLine.setEnabled(scoreOnly);
+        };
+        evaluation.setOnCheckedChangeListener((button, checked) -> {
+            Prefs.setEvaluationOnly(this, checked);
+            updateModeControls.run();
+        });
+        mateLine.setOnCheckedChangeListener((button, checked) -> Prefs.setShowMateLine(this, checked));
+        updateModeControls.run();
         sideGroup.setOnCheckedChangeListener((g, id) -> {
             Prefs.setUserSide(this, id == R.id.sideBlack ? "b" : "w");
         });
 
         btnOverlay.setOnClickListener(v -> requestOverlay());
         btnStart.setOnClickListener(v -> {
+            if (ScreenCaptureService.isRunning()) return;
             if (!Settings.canDrawOverlays(this)) { toast("Grant overlay permission first"); return; }
+            // Android offers either a single app or the entire display. Capture callbacks map
+            // full-screen app content (excluding system bars) back to the overlay's screen origin.
             projectionLauncher.launch(mpm.createScreenCaptureIntent());
         });
         btnStop.setOnClickListener(v -> {
@@ -117,20 +173,9 @@ public class MainActivity extends AppCompatActivity {
             btnStart.setEnabled(true);
         });
 
-        if (Build.VERSION.SDK_INT >= 33) {
-            ActivityCompat.requestPermissions(this,
-                    new String[]{ android.Manifest.permission.POST_NOTIFICATIONS }, 1);
-        }
     }
 
-    private String thinkLabelText(int ms) {
-        String strength;
-        if (ms < 500)       strength = "fast (≈2200 elo)";
-        else if (ms < 1000) strength = "balanced (≈2700 elo)";
-        else if (ms < 2000) strength = "strong (≈3000 elo)";
-        else                strength = "max (≈3300+ elo)";
-        return "Think time: " + ms + " ms — " + strength;
-    }
+    private String thinkLabelText(int ms) { return getString(R.string.think_time, ms); }
 
     @Override protected void onResume() {
         super.onResume();
@@ -139,7 +184,30 @@ public class MainActivity extends AppCompatActivity {
         btnOverlay.setText(overlay
                 ? getString(R.string.overlay_granted)
                 : getString(R.string.grant_overlay));
-        btnStart.setEnabled(overlay);
+        sideGroup.check("b".equals(Prefs.userSide(this)) ? R.id.sideBlack : R.id.sideWhite);
+        ((CheckBox)findViewById(R.id.evaluationOnly)).setChecked(Prefs.evaluationOnly(this));
+        ((CheckBox)findViewById(R.id.showMateLine)).setChecked(Prefs.showMateLine(this));
+        updateSessionControls();
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        ScreenCaptureService.setSettingsVisible(true);
+        ui.post(refreshSession);
+    }
+
+    @Override protected void onStop() {
+        ui.removeCallbacks(refreshSession);
+        ScreenCaptureService.setSettingsVisible(false);
+        super.onStop();
+    }
+
+    private void updateSessionControls() {
+        boolean running = ScreenCaptureService.isRunning();
+        btnStart.setEnabled(!running && Settings.canDrawOverlays(this));
+        btnStop.setEnabled(running);
+        btnReturn.setVisibility(running ? View.VISIBLE : View.GONE);
+        statusTv.setText(running ? R.string.settings_running : R.string.status_idle);
     }
 
     private void requestOverlay() {

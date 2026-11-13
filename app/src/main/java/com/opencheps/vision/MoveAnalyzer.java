@@ -7,7 +7,7 @@ import java.util.List;
 
 public class MoveAnalyzer {
 
-    public enum Kind { NONE, QUIET, CAPTURE, CASTLE, EN_PASSANT, PROMOTION, UNKNOWN }
+    public enum Kind { NONE, QUIET, CAPTURE, CASTLE, EN_PASSANT, PROMOTION, TWO_PLIES, UNKNOWN }
 
     public static class Result {
         public final Kind kind;
@@ -16,6 +16,34 @@ public class MoveAnalyzer {
         public Result(Kind kind, Side mover, int changeCount) {
             this.kind = kind; this.mover = mover; this.changeCount = changeCount;
         }
+    }
+
+    /** A quick computer reply can leave two independent quiet moves between samples. */
+    public static Result analyze(char[][] prev, char[][] curr, Side expectedFirstMover) {
+        Result single = analyze(prev, curr);
+        if (single.kind != Kind.UNKNOWN || prev == null || curr == null || expectedFirstMover == null) return single;
+        char[] from = new char[2], to = new char[2];
+        int changed = 0;
+        for (int r = 0; r < 8; r++) for (int f = 0; f < 8; f++) {
+            char before = prev[r][f] == 0 ? '.' : prev[r][f];
+            char after = curr[r][f] == 0 ? '.' : curr[r][f];
+            if (before == after) continue;
+            changed++;
+            if (before != '.' && after == '.') {
+                int side = Character.isUpperCase(before) ? 0 : 1;
+                if (from[side] != 0) return single;
+                from[side] = before;
+            } else if (before == '.' && after != '.') {
+                int side = Character.isUpperCase(after) ? 0 : 1;
+                if (to[side] != 0) return single;
+                to[side] = after;
+            } else return single; // Captures/ambiguous overlapping moves still need resynchronization.
+        }
+        if (changed == 4 && from[0] != 0 && from[1] != 0 && from[0] == to[0] && from[1] == to[1]) {
+            Side lastMover = expectedFirstMover == Side.WHITE ? Side.BLACK : Side.WHITE;
+            return new Result(Kind.TWO_PLIES, lastMover, changed);
+        }
+        return single;
     }
 
     public static Result analyze(char[][] prev, char[][] curr) {
@@ -68,39 +96,64 @@ public class MoveAnalyzer {
             return new Result(isPromotion ? Kind.PROMOTION : Kind.CAPTURE, mover, changes);
         }
 
-        if (emptied.size() == 2 && filled.size() == 1 && replaced.isEmpty()) {
-            char p1 = (char) emptied.get(0)[2];
-            char p2 = (char) emptied.get(1)[2];
-            char dest = (char) filled.get(0)[2];
-            if (Character.toLowerCase(p1) == 'p' && Character.toLowerCase(p2) == 'p'
-                    && Character.toLowerCase(dest) == 'p'
-                    && Character.isUpperCase(p1) != Character.isUpperCase(p2)) {
-                Side mover = Character.isUpperCase(dest) ? Side.WHITE : Side.BLACK;
-                return new Result(Kind.EN_PASSANT, mover, changes);
-            }
-            return new Result(Kind.UNKNOWN, null, changes);
-        }
-
-        if (emptied.size() == 2 && filled.size() == 2 && replaced.isEmpty()) {
-            char a = (char) emptied.get(0)[2];
-            char b = (char) emptied.get(1)[2];
-            char c = (char) filled.get(0)[2];
-            char d = (char) filled.get(1)[2];
-            if (Character.isUpperCase(a) == Character.isUpperCase(b)
-                    && Character.isUpperCase(c) == Character.isUpperCase(d)
-                    && Character.isUpperCase(a) == Character.isUpperCase(c)
-                    && hasPiece(a, b, 'k') && hasPiece(a, b, 'r')
-                    && hasPiece(c, d, 'k') && hasPiece(c, d, 'r')) {
-                Side mover = Character.isUpperCase(a) ? Side.WHITE : Side.BLACK;
-                return new Result(Kind.CASTLE, mover, changes);
+        // Special moves must match their exact square changes, in either board orientation.
+        if (changes == 3 || changes == 4) {
+            for (Side side : Side.values()) {
+                for (boolean flipped : new boolean[]{false, true}) {
+                    char[][] before = flipped ? FenBuilder.flip(prev) : prev;
+                    char[][] after = flipped ? FenBuilder.flip(curr) : curr;
+                    if (changes == 4 && isCastle(before, after, side))
+                        return new Result(Kind.CASTLE, side, changes);
+                    if (changes == 3 && isEnPassant(before, after, side))
+                        return new Result(Kind.EN_PASSANT, side, changes);
+                }
             }
         }
 
         return new Result(Kind.UNKNOWN, null, changes);
     }
 
-    private static boolean hasPiece(char a, char b, char piece) {
-        char lp = Character.toLowerCase(piece);
-        return Character.toLowerCase(a) == lp || Character.toLowerCase(b) == lp;
+    private static boolean isCastle(char[][] before, char[][] after, Side side) {
+        int row = side == Side.WHITE ? 7 : 0;
+        char king = side == Side.WHITE ? 'K' : 'k', rook = side == Side.WHITE ? 'R' : 'r';
+        if (before[row][4] != king) return false;
+        for (boolean kingSide : new boolean[]{true, false}) {
+            int corner = kingSide ? 7 : 0, kingTo = kingSide ? 6 : 2, rookTo = kingSide ? 5 : 3;
+            if (before[row][corner] != rook || !empty(before[row][kingTo]) || !empty(before[row][rookTo])
+                    || !kingSide && !empty(before[row][1])) continue;
+            char[][] expected = copy(before);
+            expected[row][4] = expected[row][corner] = '.';
+            expected[row][kingTo] = king;
+            expected[row][rookTo] = rook;
+            if (same(expected, after)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isEnPassant(char[][] before, char[][] after, Side side) {
+        int row = side == Side.WHITE ? 3 : 4, to = side == Side.WHITE ? 2 : 5;
+        char pawn = side == Side.WHITE ? 'P' : 'p', victim = side == Side.WHITE ? 'p' : 'P';
+        for (int f = 0; f < 8; f++) for (int dest : new int[]{f-1, f+1}) {
+            if (dest < 0 || dest > 7 || before[row][f] != pawn
+                    || before[row][dest] != victim || !empty(before[to][dest])) continue;
+            char[][] expected = copy(before);
+            expected[row][f] = expected[row][dest] = '.';
+            expected[to][dest] = pawn;
+            if (same(expected, after)) return true;
+        }
+        return false;
+    }
+
+    private static char[][] copy(char[][] board) {
+        char[][] result = new char[8][];
+        for (int r = 0; r < 8; r++) result[r] = board[r].clone();
+        return result;
+    }
+    private static boolean empty(char piece) { return piece == '.' || piece == 0; }
+    private static boolean same(char[][] a, char[][] b) {
+        for (int r = 0; r < 8; r++) for (int f = 0; f < 8; f++) {
+            if (a[r][f] != b[r][f] && !(empty(a[r][f]) && empty(b[r][f]))) return false;
+        }
+        return true;
     }
 }
